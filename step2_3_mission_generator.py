@@ -87,17 +87,18 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=200):
     return tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
 def extract_json_from_response(response_text):
-
+    # print(f"\n--- RAW MODEL OUTPUT START ---\n{response_text}\n--- RAW MODEL OUTPUT END ---\n")
     try:
-        if "```json" in response_text:
-            json_str = response_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in response_text:
-            json_str = response_text.split("```")[1].split("```")[0].strip()
-        else:
-            start = response_text.find("{")
-            end = response_text.rfind("}") + 1
+        # Robust extraction: find the first outer { and the last outer }
+        start = response_text.find("{")
+        end = response_text.rfind("}") + 1
+        
+        if start != -1 and end != 0:
             json_str = response_text[start:end]
-        return json.loads(json_str)
+            return json.loads(json_str)
+        else:
+            print("No JSON object found (missing braces).")
+            return None
     except Exception as e:
         print(f"JSON Parsing Error: {e}")
         return None
