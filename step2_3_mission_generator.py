@@ -174,7 +174,7 @@ def main():
         tokenizer, model = load_model()
     except Exception as e:
         print(f"Failed to load model: {e}")
-        return
+        sys.exit(1)
 
     # 1. Load Mission Context
     try:
@@ -182,7 +182,7 @@ def main():
             mission_context = json.load(f)
     except FileNotFoundError:
         print("MissionContext.json not found.")
-        return
+        sys.exit(1)
 
     # 2. Read PDF Documents (or txt fallback)
     pdf_path = 'data/documents.pdf'
@@ -197,7 +197,7 @@ def main():
             doc_text = f.read()
     else:
         print("No document found in data/")
-        return
+        sys.exit(1)
 
     # 3. Process Documents (Chunk & Extract)
     print("Processing Document Chunks...")
@@ -217,7 +217,7 @@ def main():
         print("Success: Created CanonicalMissionContext.json")
     else:
         print("Failed to generate Canonical Context")
-        return
+        sys.exit(1)
 
     # 5. Generate Overlay
     overlay = generate_overlay(canonical_context, model, tokenizer)
@@ -227,6 +227,7 @@ def main():
         print("Success: Created OverLay.json")
     else:
         print("Failed to generate Overlay")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
