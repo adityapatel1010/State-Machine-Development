@@ -58,7 +58,7 @@ def load_model():
         model = AutoModelForCausalLM.from_pretrained(
             MODEL_ID, 
             device_map="auto", 
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+            torch_dtype=torch.float32  # Force FP32 for stability with small model
         )
         return tokenizer, model
     except OSError as e:
