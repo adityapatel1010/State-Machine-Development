@@ -71,13 +71,19 @@ def load_model():
 
 def generate_text(model, tokenizer, prompt, max_new_tokens=1024):
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    input_length = inputs.input_ids.shape[1]
+    
     outputs = model.generate(
         **inputs, 
         max_new_tokens=max_new_tokens,
         temperature=0.2,
-        do_sample=True
+        do_sample=True,
+        pad_token_id=tokenizer.eos_token_id # Explicitly set pad_token_id to eos_token_id as warned
     )
-    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    # Decode only the NEW tokens (exclude the prompt)
+    generated_tokens = outputs[0][input_length:]
+    return tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
 def extract_json_from_response(response_text):
     try:
