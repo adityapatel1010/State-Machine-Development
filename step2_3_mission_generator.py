@@ -126,17 +126,26 @@ Output a concise summary list. If nothing relevant, say "None".
 def generate_canonical_context(mission_context, aggregated_info, model, tokenizer):
     print("Generating Canonical Context...")
     prompt = f"""<start_of_turn>user
-You are a high-level security mission analyst.
-Analyze the Mission Context and the Aggregated Security Info extracted from documents.
+You are a high-level security mission analyst. 
+Your task is to ENHANCE the provided Mission Context using the Aggregated Security Info.
 
-## Mission Context
+INPUT 1: Mission Context
 {json.dumps(mission_context, indent=2)}
 
-## Aggregated Security Info
+INPUT 2: Aggregated Security Info
 {aggregated_info}
 
-Output a JSON object ONLY, representing the 'Canonical Mission Context'.
-Include 'derived_security_profile', 'operational_constraints', and 'implicit_context_expansion'.
+INSTRUCTIONS:
+Create a NEW JSON object called 'Canonical Mission Context'.
+It MUST contain:
+- "original_mission_id": from Mission Context locaton.
+- "derived_security_profile": Object with environment and threat_model based on Security Info.
+- "operational_constraints": List of constraints from Security Info.
+- "implicit_context_expansion": A summary string.
+
+Do not just copy the input. Synthesize a new JSON.
+
+Output JSON ONLY.
 <end_of_turn>
 <start_of_turn>model
 ```json
@@ -146,19 +155,33 @@ Include 'derived_security_profile', 'operational_constraints', and 'implicit_con
 
 def generate_overlay(canonical_context, model, tokenizer):
     print("Generating Overlay with Pydantic Schema...")
-    schema_json = Overlay.model_json_schema()
+    # schema_json = Overlay.model_json_schema() # Schema is too large for 270M prompt usually, let's simplify prompt
     
     prompt = f"""<start_of_turn>user
-Based on the Canonical Mission Context, generate a State Machine Overlay.
+Task: Generate a State Machine Overlay JSON based on the Canonical Mission Context.
 
-## Canonical Mission Context
+INPUT Context:
 {json.dumps(canonical_context, indent=2)}
 
-## Requirement
-Output a valid JSON object strictly adhering to this Schema:
-{json.dumps(schema_json, indent=2)}
+INSTRUCTIONS:
+Generate a JSON object with the following structure:
+{{
+  "mission_id": "string",
+  "state_machine": {{
+    "initial_state": "Patrol",
+    "states": {{
+      "Patrol": {{ "description": "...", "actions": ["..."] }},
+      "Investigate": {{ "description": "...", "actions": ["..."] }},
+      "Alert": {{ "description": "...", "actions": ["..."] }}
+    }},
+    "transitions": [
+      {{ "from": "Patrol", "to": "Investigate", "condition": "event == 'suspicious'" }},
+      {{ "from": "Investigate", "to": "Alert", "condition": "event == 'confirmed'" }}
+    ]
+  }}
+}}
 
-Output ONLY the JSON object.
+Ensure valid JSON.
 <end_of_turn>
 <start_of_turn>model
 ```json
@@ -173,6 +196,7 @@ Output ONLY the JSON object.
             return overlay.model_dump(by_alias=True)
         except ValidationError as e:
             print(f"Pydantic Validation Error: {e}")
+            # print(f"Data: {json.dumps(data, indent=2)}")
             return None
     return None
 
