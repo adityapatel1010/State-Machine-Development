@@ -69,7 +69,10 @@ def load_model():
             print("Or set HF_TOKEN environment variable.\n")
         raise e
 
-def generate_text(model, tokenizer, prompt, max_new_tokens=200):
+def generate_text(model, tokenizer, messages, max_new_tokens=1024):
+    # Use apply_chat_template to format the prompt correctly for the model
+    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     input_length = inputs.input_ids.shape[1]
     
@@ -81,10 +84,11 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=200):
         pad_token_id=tokenizer.eos_token_id # Explicitly set pad_token_id to eos_token_id as warned
     )
     
-    # Decode only the NEW tokens (exclude the prompt)
+    # Decode only the NEW tokens
     generated_tokens = outputs[0][input_length:]
-    print(tokenizer.decode(generated_tokens, skip_special_tokens=True))
-    return tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    print(f"DEBUG Response: {response}") # Optional debug
+    return response
 
 def extract_json_from_response(response_text):
     # print(f"\n--- RAW MODEL OUTPUT START ---\n{response_text}\n--- RAW MODEL OUTPUT END ---\n")
@@ -106,8 +110,8 @@ def extract_json_from_response(response_text):
 # --- Core Logic ---
 
 def extract_security_info(chunk, model, tokenizer):
-    prompt = f"""<start_of_turn>user
-Analyze the following text chunk. Extract ANY information related to:
+    messages = [
+        {"role": "user", "content": f"""Analyze the following text chunk. Extract ANY information related to:
 - Security protocols
 - Threat models or threat levels
 - Operational constraints or domain rules
@@ -117,15 +121,14 @@ Chunk:
 {chunk}
 
 Output a concise summary list. If nothing relevant, say "None".
-<end_of_turn>
-<start_of_turn>model
-"""
-    return generate_text(model, tokenizer, prompt, max_new_tokens=256)
+"""}
+    ]
+    return generate_text(model, tokenizer, messages, max_new_tokens=256)
 
 def generate_canonical_context(mission_context, aggregated_info, model, tokenizer):
     print("Generating Canonical Context...")
-    prompt = f"""<start_of_turn>user
-You are a high-level security mission analyst.
+    messages = [
+        {"role": "user", "content": f"""You are a high-level security mission analyst.
 Analyze the Mission Context and the Aggregated Security Info extracted from documents.
 
 ## Mission Context
@@ -136,19 +139,17 @@ Analyze the Mission Context and the Aggregated Security Info extracted from docu
 
 Output a JSON object ONLY, representing the 'Canonical Mission Context'.
 Include 'derived_security_profile', 'operational_constraints', and 'implicit_context_expansion'.
-<end_of_turn>
-<start_of_turn>model
-```json
-"""
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=1024)
+"""}
+    ]
+    response = generate_text(model, tokenizer, messages, max_new_tokens=1024)
     return extract_json_from_response(response)
 
 def generate_overlay(canonical_context, model, tokenizer):
     print("Generating Overlay with Pydantic Schema...")
     schema_json = Overlay.model_json_schema()
     
-    prompt = f"""<start_of_turn>user
-Based on the Canonical Mission Context, generate a State Machine Overlay.
+    messages = [
+        {"role": "user", "content": f"""Based on the Canonical Mission Context, generate a State Machine Overlay.
 
 ## Canonical Mission Context
 {json.dumps(canonical_context, indent=2)}
@@ -158,11 +159,9 @@ Output a valid JSON object strictly adhering to this Schema:
 {json.dumps(schema_json, indent=2)}
 
 Output ONLY the JSON object.
-<end_of_turn>
-<start_of_turn>model
-```json
-"""
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=2048)
+"""}
+    ]
+    response = generate_text(model, tokenizer, messages, max_new_tokens=2048)
     data = extract_json_from_response(response)
     
     if data:
