@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "compiler_version": "1.0.0",
+    "source_mission_id": "Sector 7",
+    "checksum": "hash_955"
+  },
+  "spec": {
+    "initial_state": "Patrol",
+    "states": {
+      "Patrol": {
+        "description": "Routine surveillance of the sector.",
+        "actions": [
+          "fly_waypoint_path",
+          "scan_for_objects"
+        ]
+      },
+      "Investigate": {
+        "description": "Closer inspection of suspicious activity.",
+        "actions": [
+          "hover_at_location",
+          "focus_camera",
+          "maintain_altitude_50m"
+        ]
+      },
+      "Alert_Operator": {
+        "description": "Notify human operator of confirmed threat.",
+        "actions": [
+          "send_alert_signal",
+          "stream_video_high_res"
+        ]
+      },
+      "Lockdown": {
+        "description": "Secure the area.",
+        "actions": [
+          "broadcast_warning",
+          "close_sector_gates"
+        ]
+      }
+    },
+    "transitions": [
+      {
+        "from": "Patrol",
+        "to": "Investigate",
+        "condition": "event == 'suspicious_movement_detected'"
+      },
+      {
+        "from": "Investigate",
+        "to": "Alert_Operator",
+        "condition": "event == 'unauthorized_person_confirmed'"
+      },
+      {
+        "from": "Investigate",
+        "to": "Patrol",
+        "condition": "event == 'false_alarm'"
+      },
+      {
+        "from": "Alert_Operator",
+        "to": "Lockdown",
+        "condition": "event == 'escalate_command_received'"
+      }
+    ]
+  }
+}

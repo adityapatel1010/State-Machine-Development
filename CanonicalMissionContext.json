@@ -1,0 +1,18 @@
+{
+  "original_mission_id": "Sector 7",
+  "derived_security_profile": {
+    "environment": "urban",
+    "threat_model": [
+      "unauthorized_entry",
+      "suspicious_movement",
+      "weapons_detected"
+    ],
+    "autonomy_level": "semi-autonomous"
+  },
+  "operational_constraints": [
+    "Maintain 50m altitude (from documents)",
+    "Lockdown on unauthorized access (from documents)",
+    "Observe, Report, Act protocol (from documents)"
+  ],
+  "implicit_context_expansion": "The mission requires high vigilance during 0800-2000 hours. The 'standard' security level is elevated to 'tight' based on the specific threat of unauthorized entry in Sector 7."
+}

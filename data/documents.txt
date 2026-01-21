@@ -1,0 +1,9 @@
+# Mission Security Guidelines
+All operations must adhere to the strict protocol of "Observe, Report, Act".
+Unauthorized access attempts should trigger an immediate lockdown of the affected sector.
+Surveillance drones are to maintain a 50m altitude in urban environments.
+
+# Threat Detection Protocols
+Level 1 Threat: Suspicious movement. Action: Log and Track.
+Level 2 Threat: Confirmed unauthorized person. Action: Alert Operator.
+Level 3 Threat: Weapon detected. Action: Escalate to Law Enforcement / Security Team.
