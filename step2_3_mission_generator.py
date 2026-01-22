@@ -164,24 +164,18 @@ INPUT Context:
 {json.dumps(canonical_context, indent=2)}
 
 INSTRUCTIONS:
-Generate a JSON object with the following structure:
-{{
-  "mission_id": "string",
-  "state_machine": {{
-    "initial_state": "Patrol",
-    "states": {{
-      "Patrol": {{ "description": "...", "actions": ["..."] }},
-      "Investigate": {{ "description": "...", "actions": ["..."] }},
-      "Alert": {{ "description": "...", "actions": ["..."] }}
-    }},
-    "transitions": [
-      {{ "from": "Patrol", "to": "Investigate", "condition": "event == 'suspicious'" }},
-      {{ "from": "Investigate", "to": "Alert", "condition": "event == 'confirmed'" }}
-    ]
-  }}
-}}
+You must generate a valid JSON object matching the following structure (Pydantic schema):
+1. "mission_id": Must match the 'original_mission_id' from the context.
+2. "state_machine": Object containing:
+   - "initial_state": Name of the starting state (e.g. "Patrol").
+   - "states": A dict where keys are state names and values have "description" and "actions" list.
+   - "transitions": A list of objects with "from", "to", and "condition".
 
-Ensure valid JSON.
+DESIGN REQUIREMENTS:
+- Create at least 3 distinct states relevant to the mission (e.g., Patrol, Investigate, Lockdown, ReturnToBase).
+- Define transitions that logically connect these states based on the security profile.
+- Return ONLY the JSON object.
+
 <end_of_turn>
 <start_of_turn>model
 ```json

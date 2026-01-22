@@ -1,0 +1,1 @@
+give inpiration of states of mars rover and based on conditions provided by user for getting states like find gold.( give canonical )
