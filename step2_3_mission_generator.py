@@ -308,6 +308,11 @@ INSTRUCTIONS:
 You must generate a valid JSON object matching the structures defined in this Pydantic Schema:
 {json.dumps(schema_json, indent=2)}
 
+DESIGN REQUIREMENTS:
+- Create at least 3 distinct states relevant to the mission.
+- Define transitions that logically connect these states based on the security profile.
+- Return ONLY the JSON object, strictly adhering to the Pydantic format defined above.
+
 <end_of_turn>
 <start_of_turn>model
 ```json
