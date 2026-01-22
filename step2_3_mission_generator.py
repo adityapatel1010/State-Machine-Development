@@ -11,6 +11,148 @@ from pypdf import PdfReader
 MODEL_ID = "google/gemma-3-270m-it"
 CHUNK_SIZE = 1000  # Characters for rough chunking
 
+# Sample States for prompt customization
+SAMPLE_STATES = """
+{
+  "mission_id": "lunar_rover_mission_001",
+  "state_machine": {
+    "initial_state": "powered_off",
+    "states": {
+      "powered_off": {
+        "description": "Rover is powered down prior to mission start.",
+        "actions": [
+          "monitor_battery_health",
+          "await_start_command"
+        ]
+      },
+      "booting": {
+        "description": "Rover systems are booting and performing initial checks.",
+        "actions": [
+          "initialize_computers",
+          "run_self_diagnostics",
+          "calibrate_sensors"
+        ]
+      },
+      "idle": {
+        "description": "Rover is ready but awaiting further instructions.",
+        "actions": [
+          "maintain_thermal_balance",
+          "listen_for_commands",
+          "low_power_monitoring"
+        ]
+      },
+      "navigating": {
+        "description": "Rover is traversing the lunar surface to a target location.",
+        "actions": [
+          "plan_path",
+          "avoid_obstacles",
+          "drive_motors",
+          "update_position_estimate"
+        ]
+      },
+      "science_operations": {
+        "description": "Rover is conducting scientific measurements and experiments.",
+        "actions": [
+          "deploy_instruments",
+          "collect_samples",
+          "analyze_soil",
+          "store_science_data"
+        ]
+      },
+      "communicating": {
+        "description": "Rover is transmitting or receiving data from mission control.",
+        "actions": [
+          "establish_link",
+          "transmit_telemetry",
+          "receive_commands"
+        ]
+      },
+      "charging": {
+        "description": "Rover is replenishing power using solar panels.",
+        "actions": [
+          "orient_to_sun",
+          "deploy_solar_panels",
+          "charge_batteries"
+        ]
+      },
+      "safe_mode": {
+        "description": "Rover has detected an anomaly and entered a protective state.",
+        "actions": [
+          "shutdown_non_essential_systems",
+          "log_fault_data",
+          "attempt_self_recovery"
+        ]
+      },
+      "mission_complete": {
+        "description": "Mission objectives have been completed.",
+        "actions": [
+          "final_data_transmission",
+          "power_down_non_critical_systems"
+        ]
+      }
+    },
+    "transitions": [
+      {
+        "from": "powered_off",
+        "to": "booting",
+        "condition": "event == 'start_mission'"
+      },
+      {
+        "from": "booting",
+        "to": "idle",
+        "condition": "diagnostics_passed == true"
+      },
+      {
+        "from": "idle",
+        "to": "navigating",
+        "condition": "event == 'navigate_to_target'"
+      },
+      {
+        "from": "navigating",
+        "to": "science_operations",
+        "condition": "at_target_location == true"
+      },
+      {
+        "from": "science_operations",
+        "to": "communicating",
+        "condition": "data_ready == true"
+      },
+      {
+        "from": "communicating",
+        "to": "idle",
+        "condition": "communication_complete == true"
+      },
+      {
+        "from": "idle",
+        "to": "charging",
+        "condition": "battery_level < 20"
+      },
+      {
+        "from": "charging",
+        "to": "idle",
+        "condition": "battery_level >= 80"
+      },
+      {
+        "from": "idle",
+        "to": "safe_mode",
+        "condition": "event == 'critical_fault'"
+      },
+      {
+        "from": "safe_mode",
+        "to": "idle",
+        "condition": "fault_resolved == true"
+      },
+      {
+        "from": "idle",
+        "to": "mission_complete",
+        "condition": "event == 'end_mission'"
+      }
+    ]
+  }
+}
+
+"""
+
 # --- Pydantic Schema Definition (Step 3) ---
 
 class Transition(BaseModel):
@@ -30,6 +172,48 @@ class StateMachine(BaseModel):
 class Overlay(BaseModel):
     mission_id: str
     state_machine: StateMachine
+
+# ... [Helpers unchanged] ...
+
+def generate_overlay(canonical_context, model, tokenizer):
+    print("Generating Overlay with Pydantic Schema...")
+    
+    prompt = f"""<start_of_turn>user
+Task: Generate a State Machine Overlay JSON based on the Canonical Mission Context.
+
+INPUT Context:
+{json.dumps(canonical_context, indent=2)}
+
+INSTRUCTIONS:
+You must generate a valid JSON object matching the following structure (Pydantic schema):
+1. "mission_id": Must match the 'original_mission_id' from the context.
+2. "state_machine": Object containing:
+   - "initial_state": Name of the starting state.
+   - "states": A dict where keys are state names and values have "description" and "actions" list.
+   - "transitions": A list of objects with "from", "to", and "condition".
+
+DESIGN REQUIREMENTS:
+- Use states inspired by these SAMPLES:
+{SAMPLE_STATES}
+- Define transitions that logically connect these states based on the operational constraints (e.g., battery levels, torque limits).
+- Return ONLY the JSON object.
+
+<end_of_turn>
+<start_of_turn>model
+```json
+"""
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=2048)
+    data = extract_json_from_response(response)
+    
+    if data:
+        try:
+            print("Validating with Pydantic...")
+            overlay = Overlay.model_validate(data)
+            return overlay.model_dump(by_alias=True)
+        except ValidationError as e:
+            print(f"Pydantic Validation Error: {e}")
+            return None
+    return None
 
 # --- Helpers ---
 
@@ -167,12 +351,12 @@ INSTRUCTIONS:
 You must generate a valid JSON object matching the following structure (Pydantic schema):
 1. "mission_id": Must match the 'original_mission_id' from the context.
 2. "state_machine": Object containing:
-   - "initial_state": Name of the starting state (e.g. "Patrol").
+   - "initial_state": Name of the starting state.
    - "states": A dict where keys are state names and values have "description" and "actions" list.
    - "transitions": A list of objects with "from", "to", and "condition".
 
 DESIGN REQUIREMENTS:
-- Create at least 3 distinct states relevant to the mission (e.g., Patrol, Investigate, Lockdown, ReturnToBase).
+- Create at least 3 distinct states relevant to the mission.
 - Define transitions that logically connect these states based on the security profile.
 - Return ONLY the JSON object.
 

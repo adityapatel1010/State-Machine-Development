@@ -1,9 +1,17 @@
-# Mission Security Guidelines
-All operations must adhere to the strict protocol of "Observe, Report, Act".
-Unauthorized access attempts should trigger an immediate lockdown of the affected sector.
-Surveillance drones are to maintain a 50m altitude in urban environments.
+# Lunar Rover Mission Guidelines
+The primary objective is autonomous exploration and sample collection on the lunar surface.
+All operations must prioritize battery conservation during eclipse periods.
 
-# Threat Detection Protocols
-Level 1 Threat: Suspicious movement. Action: Log and Track.
-Level 2 Threat: Confirmed unauthorized person. Action: Alert Operator.
-Level 3 Threat: Weapon detected. Action: Escalate to Law Enforcement / Security Team.
+# Navigation Protocols
+1. Autonomous Pathfinding: Avoid craters > 2m depth.
+2. Communication: Maintain Line-of-Sight with Relay Orbiter.
+3. Keep-Out Zones: Historic landing sites are strictly off-limits (500m buffer).
+
+# Power Management
+- Solar arrays must be deployed when sun elevation > 5 degrees.
+- Enter 'Hibernation' mode if battery drops below 20%.
+
+# Sample Collection
+- Target regolith rich in Helium-3.
+- Drill depth maximum: 50cm.
+- Abort drilling if torque exceeds 80Nm.
