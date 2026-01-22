@@ -150,7 +150,6 @@ SAMPLE_STATES = """
     ]
   }
 }
-
 """
 
 # --- Pydantic Schema Definition (Step 3) ---
@@ -172,48 +171,6 @@ class StateMachine(BaseModel):
 class Overlay(BaseModel):
     mission_id: str
     state_machine: StateMachine
-
-# ... [Helpers unchanged] ...
-
-def generate_overlay(canonical_context, model, tokenizer):
-    print("Generating Overlay with Pydantic Schema...")
-    
-    prompt = f"""<start_of_turn>user
-Task: Generate a State Machine Overlay JSON based on the Canonical Mission Context.
-
-INPUT Context:
-{json.dumps(canonical_context, indent=2)}
-
-INSTRUCTIONS:
-You must generate a valid JSON object matching the following structure (Pydantic schema):
-1. "mission_id": Must match the 'original_mission_id' from the context.
-2. "state_machine": Object containing:
-   - "initial_state": Name of the starting state.
-   - "states": A dict where keys are state names and values have "description" and "actions" list.
-   - "transitions": A list of objects with "from", "to", and "condition".
-
-DESIGN REQUIREMENTS:
-- Use states inspired by these SAMPLES:
-{SAMPLE_STATES}
-- Define transitions that logically connect these states based on the operational constraints (e.g., battery levels, torque limits).
-- Return ONLY the JSON object.
-
-<end_of_turn>
-<start_of_turn>model
-```json
-"""
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=2048)
-    data = extract_json_from_response(response)
-    
-    if data:
-        try:
-            print("Validating with Pydantic...")
-            overlay = Overlay.model_validate(data)
-            return overlay.model_dump(by_alias=True)
-        except ValidationError as e:
-            print(f"Pydantic Validation Error: {e}")
-            return None
-    return None
 
 # --- Helpers ---
 
@@ -339,7 +296,7 @@ Output JSON ONLY.
 
 def generate_overlay(canonical_context, model, tokenizer):
     print("Generating Overlay with Pydantic Schema...")
-    # schema_json = Overlay.model_json_schema() # Schema is too large for 270M prompt usually, let's simplify prompt
+    schema_json = Overlay.model_json_schema()
     
     prompt = f"""<start_of_turn>user
 Task: Generate a State Machine Overlay JSON based on the Canonical Mission Context.
@@ -348,17 +305,8 @@ INPUT Context:
 {json.dumps(canonical_context, indent=2)}
 
 INSTRUCTIONS:
-You must generate a valid JSON object matching the following structure (Pydantic schema):
-1. "mission_id": Must match the 'original_mission_id' from the context.
-2. "state_machine": Object containing:
-   - "initial_state": Name of the starting state.
-   - "states": A dict where keys are state names and values have "description" and "actions" list.
-   - "transitions": A list of objects with "from", "to", and "condition".
-
-DESIGN REQUIREMENTS:
-- Create at least 3 distinct states relevant to the mission.
-- Define transitions that logically connect these states based on the security profile.
-- Return ONLY the JSON object.
+You must generate a valid JSON object matching the structures defined in this Pydantic Schema:
+{json.dumps(schema_json, indent=2)}
 
 <end_of_turn>
 <start_of_turn>model
@@ -374,7 +322,6 @@ DESIGN REQUIREMENTS:
             return overlay.model_dump(by_alias=True)
         except ValidationError as e:
             print(f"Pydantic Validation Error: {e}")
-            # print(f"Data: {json.dumps(data, indent=2)}")
             return None
     return None
 
