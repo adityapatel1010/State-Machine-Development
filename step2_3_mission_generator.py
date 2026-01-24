@@ -78,7 +78,7 @@ def load_model():
             print("Or set HF_TOKEN environment variable.\n")
         raise e
 
-def generate_text(model, tokenizer, prompt, max_new_tokens=1024):
+def generate_text(model, tokenizer, prompt, max_new_tokens=1024, stop_at_json=True):
     """Generate text from model given a prompt"""
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     input_length = inputs.input_ids.shape[1]
@@ -95,6 +95,20 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=1024):
     # Decode only the NEW tokens
     generated_tokens = outputs[0][input_length:]
     response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    
+    # If stop_at_json is True, truncate after the first complete JSON object
+    if stop_at_json:
+        start = response.find("{")
+        if start != -1:
+            brace_count = 0
+            for i in range(start, len(response)):
+                if response[i] == '{':
+                    brace_count += 1
+                elif response[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        response = response[:i+1]
+                        break
     
     # Show response length info
     print(f"Generated {len(generated_tokens)} tokens ({len(response)} chars)")
@@ -154,13 +168,11 @@ def extract_json_from_response(response_text):
 
 def validate_canonical_context(data):
     """Simple validation for canonical context"""
-    required = ["mission_id", "key_variables", "key_states", "constraints"]
+    required = ["mission_id", "key_variables", "constraints"]
     if not all(k in data for k in required):
         return False, f"Missing required keys. Need: {required}, Got: {list(data.keys())}"
     if not isinstance(data["key_variables"], list):
         return False, "key_variables must be a list"
-    if not isinstance(data["key_states"], list):
-        return False, "key_states must be a list"
     if not isinstance(data["constraints"], list):
         return False, "constraints must be a list"
     return True, "Valid"
@@ -215,7 +227,7 @@ def generate_canonical_context(mission_context, aggregated_info, model, tokenize
     """Generate canonical context identifying key variables and states"""
     print("Generating Canonical Context...")
     prompt = f"""<start_of_turn>user
-You are analyzing a mission to identify key states and variables.
+You are analyzing a mission to identify key variables that need to be tracked.
 
 MISSION CONTEXT:
 {json.dumps(mission_context, indent=2)}
@@ -223,38 +235,39 @@ MISSION CONTEXT:
 SECURITY/OPERATIONAL INFO:
 {aggregated_info}
 
-REFERENCE EXAMPLE (for understanding state machines):
-{SAMPLE_STATES}
-
 YOUR TASK:
-1. Identify KEY VARIABLES that will change during the mission (e.g., battery_level, position, connection_status)
-2. Identify KEY STATES the system can be in (e.g., idle, active, charging, emergency)
-3. List CONSTRAINTS or rules from the security info
+Identify KEY VARIABLES that will change during the mission and need to be monitored.
+
+Examples of variables:
+- battery_level (numeric): Battery percentage
+- connection_status (boolean): Link status
+- position (string): Current location
+- temperature (numeric): System temperature
+- mode (string): Operating mode
 
 OUTPUT REQUIREMENTS:
-- Output ONLY valid JSON
-- Keep it concise - limit to 5-7 variables and 5-8 states maximum
-- Use this exact structure:
+- Output ONLY valid JSON, nothing else
+- Keep it concise - limit to 5-8 variables maximum
+- Include only variables that are critical for state transitions
+- Do NOT include "key_states" - only variables and constraints
+- Use EXACTLY this structure with NO additional fields:
+
 {{
-  "mission_id": "<mission_id_from_context>",
+  "mission_id": "<use the exact mission_id from context>",
   "key_variables": [
     {{"name": "battery_level", "type": "numeric", "description": "Battery percentage"}},
     {{"name": "status", "type": "string", "description": "Current operational status"}}
   ],
-  "key_states": [
-    {{"name": "idle", "description": "System waiting for commands"}},
-    {{"name": "active", "description": "System performing tasks"}}
-  ],
   "constraints": ["Must maintain connection", "Battery above 10%"]
 }}
 
-Generate the JSON now:
+IMPORTANT: Output ONLY the JSON object above. Do not add explanations, markdown, or any other text.
 <end_of_turn>
 <start_of_turn>model
 {{
 """
     # Increase token limit to ensure complete response
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=1536)
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=1024, stop_at_json=True)
     
     # Add opening brace if not present
     if not response.strip().startswith('{'):
@@ -262,71 +275,93 @@ Generate the JSON now:
     
     data = extract_json_from_response(response)
     
-    # Validate
+    # Validate - update validation to not require key_states
     if data:
-        is_valid, msg = validate_canonical_context(data)
-        if is_valid:
-            print(f"✓ Canonical Context validated: {msg}")
-            return data
-        else:
-            print(f"✗ Validation failed: {msg}")
+        # Remove key_states if the model included it anyway
+        if "key_states" in data:
+            print("⚠ Model included key_states, removing it...")
+            del data["key_states"]
+        
+        required = ["mission_id", "key_variables", "constraints"]
+        if not all(k in data for k in required):
+            print(f"✗ Missing required keys. Need: {required}, Got: {list(data.keys())}")
             return None
+        if not isinstance(data["key_variables"], list):
+            print("✗ key_variables must be a list")
+            return None
+        if not isinstance(data["constraints"], list):
+            print("✗ constraints must be a list")
+            return None
+        print(f"✓ Canonical Context validated")
+        return data
     return None
 
 def generate_overlay(canonical_context, model, tokenizer):
     """Generate state machine overlay from canonical context"""
     print("Generating Overlay...")
     
-    # Extract state names for easier reference
-    state_names = [s["name"] for s in canonical_context.get("key_states", [])]
+    # Extract variable names for easier reference
     variable_names = [v["name"] for v in canonical_context.get("key_variables", [])]
     
     prompt = f"""<start_of_turn>user
 You are creating a state machine for a mission.
 
-INPUT (Variables and States identified):
+MISSION CONTEXT WITH VARIABLES:
 {json.dumps(canonical_context, indent=2)}
 
+REFERENCE STATES (Select and adapt the relevant ones for this mission):
+{SAMPLE_STATES}
+
 YOUR TASK:
-Create a complete state machine with:
-1. Use these states: {', '.join(state_names)}
-2. Create transitions using these variables: {', '.join(variable_names)}
-3. Each state needs ONLY 2-3 brief actions (keep actions minimal and concise)
-4. Create logical transitions between states
+1. Analyze the mission context and variables
+2. Select the MOST RELEVANT states from the reference states above
+3. You can also create new states if needed for this specific mission
+4. Create transitions between states using the key_variables: {', '.join(variable_names)}
+5. Each state should have 2-3 brief, specific actions
 
 OUTPUT REQUIREMENTS:
-- Output ONLY valid JSON
+- Output ONLY valid JSON, nothing else
 - mission_id MUST be: "{canonical_context.get('mission_id', '')}"
+- Select 5-8 most important states for this mission
 - Keep descriptions brief (one sentence)
 - Keep actions minimal (2-3 actions per state, using simple verbs)
-- Use simple conditions like: "battery_level < 20" or "status == 'ready'"
-- Use this EXACT structure:
+- Create logical transitions using conditions like: "battery_level < 20" or "status == 'ready'"
+- Use EXACTLY this structure:
 
 {{
   "mission_id": "{canonical_context.get('mission_id', '')}",
-  "initial_state": "{state_names[0] if state_names else 'idle'}",
+  "initial_state": "idle",
   "states": {{
-    "{state_names[0] if state_names else 'idle'}": {{
-      "description": "Brief description",
-      "actions": ["action1", "action2"]
+    "idle": {{
+      "description": "System waiting for commands",
+      "actions": ["monitor_systems", "listen_for_commands"]
+    }},
+    "active": {{
+      "description": "System performing operations",
+      "actions": ["execute_tasks", "update_status"]
     }}
   }},
   "transitions": [
     {{
-      "from": "{state_names[0] if state_names else 'idle'}",
-      "to": "{state_names[1] if len(state_names) > 1 else 'active'}",
-      "condition": "battery_level > 50"
+      "from": "idle",
+      "to": "active",
+      "condition": "command_received == true"
+    }},
+    {{
+      "from": "active",
+      "to": "idle",
+      "condition": "task_complete == true"
     }}
   ]
 }}
 
-Generate the complete state machine JSON now:
+IMPORTANT: Output ONLY the JSON object. Do not add explanations, markdown formatting, or any other text.
 <end_of_turn>
 <start_of_turn>model
 {{
 """
     # Increase token limit for overlay generation
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=3072)
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=3072, stop_at_json=True)
     
     # Add opening brace if not present
     if not response.strip().startswith('{'):
@@ -363,6 +398,7 @@ def main():
         with open('MissionContext.json', 'r') as f:
             mission_context = json.load(f)
         print(f"✓ Loaded MissionContext.json")
+        print(f"  Mission ID: {mission_context.get('mission_id', 'N/A')}")
     except FileNotFoundError:
         print("✗ MissionContext.json not found.")
         sys.exit(1)
@@ -417,7 +453,7 @@ def main():
         print(f"✓ Success: Created {output_file}")
         print(f"  - Mission ID: {canonical_context.get('mission_id')}")
         print(f"  - Variables: {len(canonical_context.get('key_variables', []))}")
-        print(f"  - States: {len(canonical_context.get('key_states', []))}")
+        print(f"  - Constraints: {len(canonical_context.get('constraints', []))}")
     else:
         print("✗ Failed to generate Canonical Context")
         sys.exit(1)
