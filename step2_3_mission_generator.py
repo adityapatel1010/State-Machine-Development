@@ -152,25 +152,25 @@ SAMPLE_STATES = """
 }
 """
 
-# --- Pydantic Schema Definition (Step 3) ---
+# # --- Pydantic Schema Definition (Step 3) ---
 
-class Transition(BaseModel):
-    from_state: str = Field(..., alias="from")
-    to_state: str = Field(..., alias="to")
-    condition: str = Field(..., description="Condition string e.g. event == 'alert'")
+# class Transition(BaseModel):
+#     from_state: str = Field(..., alias="from")
+#     to_state: str = Field(..., alias="to")
+#     condition: str = Field(..., description="Condition string e.g. event == 'alert'")
 
-class StateAction(BaseModel):
-    description: str
-    actions: List[str]
+# class StateAction(BaseModel):
+#     description: str
+#     actions: List[str]
 
-class StateMachine(BaseModel):
-    initial_state: str
-    states: Dict[str, StateAction]
-    transitions: List[Transition]
+# class StateMachine(BaseModel):
+#     initial_state: str
+#     states: Dict[str, StateAction]
+#     transitions: List[Transition]
 
-class Overlay(BaseModel):
-    mission_id: str
-    state_machine: StateMachine
+# class Overlay(BaseModel):
+#     mission_id: str
+#     state_machine: StateMachine
 
 # --- Helpers ---
 
@@ -297,11 +297,48 @@ Output JSON ONLY.
     response = generate_text(model, tokenizer, prompt, max_new_tokens=1024)
     return extract_json_from_response(response)
 
+OVERLAY_SIMPLE_SCHEMA = {
+  "type": "object",
+  "properties": {
+    "mission_id": {"type": "string", "description": "Must match original_mission_id from input"},
+    "state_machine": {
+      "type": "object",
+      "properties": {
+        "initial_state": {"type": "string"},
+        "states": {
+          "type": "object",
+          "description": "Keys are state names. Values are objects with description and action list.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "description": {"type": "string"},
+              "actions": {"type": "array", "items": {"type": "string"}}
+            },
+            "required": ["description", "actions"]
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {"type": "string"},
+              "to": {"type": "string"},
+              "condition": {"type": "string"}
+            },
+            "required": ["from", "to", "condition"]
+          }
+        }
+      },
+      "required": ["initial_state", "states", "transitions"]
+    }
+  },
+  "required": ["mission_id", "state_machine"]
+}
+
 def generate_overlay(canonical_context, model, tokenizer):
-    schema_json = Overlay.model_json_schema()
-    print("Pydantic Schema:")
-    print(json.dumps(schema_json, indent=2))
-    print("Generating Overlay with Pydantic Schema...")
+    print("Generating Overlay with Schema...")
+    schema_json = OVERLAY_SIMPLE_SCHEMA
     
     prompt = f"""<start_of_turn>user
 Task: Generate a detailed State Machine Overlay JSON for the mission.
