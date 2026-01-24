@@ -10,143 +10,31 @@ from pypdf import PdfReader
 MODEL_ID = "google/gemma-3-270m-it"
 CHUNK_SIZE = 1000  # Characters for rough chunking
 
-# Sample States for prompt customization
+# Sample States for prompt customization - simplified to show only states and variables
 SAMPLE_STATES = """
-{
-  "mission_id": "lunar_rover_mission_001",
-  "initial_state": "powered_off",
-  "states": {
-    "powered_off": {
-      "description": "Rover is powered down prior to mission start.",
-      "actions": [
-        "monitor_battery_health",
-        "await_start_command"
-      ]
-    },
-    "booting": {
-      "description": "Rover systems are booting and performing initial checks.",
-      "actions": [
-        "initialize_computers",
-        "run_self_diagnostics",
-        "calibrate_sensors"
-      ]
-    },
-    "idle": {
-      "description": "Rover is ready but awaiting further instructions.",
-      "actions": [
-        "maintain_thermal_balance",
-        "listen_for_commands",
-        "low_power_monitoring"
-      ]
-    },
-    "navigating": {
-      "description": "Rover is traversing the lunar surface to a target location.",
-      "actions": [
-        "plan_path",
-        "avoid_obstacles",
-        "drive_motors",
-        "update_position_estimate"
-      ]
-    },
-    "science_operations": {
-      "description": "Rover is conducting scientific measurements and experiments.",
-      "actions": [
-        "deploy_instruments",
-        "collect_samples",
-        "analyze_soil",
-        "store_science_data"
-      ]
-    },
-    "communicating": {
-      "description": "Rover is transmitting or receiving data from mission control.",
-      "actions": [
-        "establish_link",
-        "transmit_telemetry",
-        "receive_commands"
-      ]
-    },
-    "charging": {
-      "description": "Rover is replenishing power using solar panels.",
-      "actions": [
-        "orient_to_sun",
-        "deploy_solar_panels",
-        "charge_batteries"
-      ]
-    },
-    "safe_mode": {
-      "description": "Rover has detected an anomaly and entered a protective state.",
-      "actions": [
-        "shutdown_non_essential_systems",
-        "log_fault_data",
-        "attempt_self_recovery"
-      ]
-    },
-    "mission_complete": {
-      "description": "Mission objectives have been completed.",
-      "actions": [
-        "final_data_transmission",
-        "power_down_non_critical_systems"
-      ]
-    }
-  },
-  "transitions": [
-    {
-      "from": "powered_off",
-      "to": "booting",
-      "condition": "event == 'start_mission'"
-    },
-    {
-      "from": "booting",
-      "to": "idle",
-      "condition": "diagnostics_passed == true"
-    },
-    {
-      "from": "idle",
-      "to": "navigating",
-      "condition": "event == 'navigate_to_target'"
-    },
-    {
-      "from": "navigating",
-      "to": "science_operations",
-      "condition": "at_target_location == true"
-    },
-    {
-      "from": "science_operations",
-      "to": "communicating",
-      "condition": "data_ready == true"
-    },
-    {
-      "from": "communicating",
-      "to": "idle",
-      "condition": "communication_complete == true"
-    },
-    {
-      "from": "idle",
-      "to": "charging",
-      "condition": "battery_level < 20"
-    },
-    {
-      "from": "charging",
-      "to": "idle",
-      "condition": "battery_level >= 80"
-    },
-    {
-      "from": "idle",
-      "to": "safe_mode",
-      "condition": "event == 'critical_fault'"
-    },
-    {
-      "from": "safe_mode",
-      "to": "idle",
-      "condition": "fault_resolved == true"
-    },
-    {
-      "from": "idle",
-      "to": "mission_complete",
-      "condition": "event == 'end_mission'"
-    }
-  ]
-}
+EXAMPLE - Lunar Rover Mission:
+
+Key Variables:
+- battery_level (numeric): Current battery percentage
+- position (string): Current location coordinates
+- connection_status (boolean): Link to mission control
+- diagnostics_passed (boolean): System health check result
+- at_target_location (boolean): Whether rover reached destination
+- data_ready (boolean): Science data ready for transmission
+- fault_detected (boolean): Critical system fault indicator
+
+Key States:
+- powered_off: System is shut down
+- booting: Starting up and running checks
+- idle: Ready and waiting for commands
+- navigating: Moving to target location
+- science_operations: Conducting experiments
+- communicating: Transmitting/receiving data
+- charging: Replenishing battery power
+- safe_mode: Emergency protective state
+- mission_complete: All objectives finished
+
+Note: The model should create appropriate transitions between these states based on the variables.
 """
 
 # --- Helpers ---
@@ -200,13 +88,18 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=1024):
         max_new_tokens=max_new_tokens,
         temperature=0.0,
         do_sample=False,
-        pad_token_id=tokenizer.eos_token_id
+        pad_token_id=tokenizer.eos_token_id,
+        eos_token_id=tokenizer.eos_token_id
     )
     
     # Decode only the NEW tokens
     generated_tokens = outputs[0][input_length:]
     response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-    print(f"DEBUG Response: {response}")  # Show first 200 chars
+    
+    # Show response length info
+    print(f"Generated {len(generated_tokens)} tokens ({len(response)} chars)")
+    print(f"Preview: {response[:150]}...")
+    
     return response
 
 def extract_json_from_response(response_text):
@@ -222,9 +115,39 @@ def extract_json_from_response(response_text):
         else:
             print("No JSON object found (missing braces).")
             return None
-    except Exception as e:
+    except json.JSONDecodeError as e:
         print(f"JSON Parsing Error: {e}")
-        print(f"Attempted to parse: {response_text[start:end][:500]}...")
+        # Try to fix common issues
+        start = response_text.find("{")
+        if start == -1:
+            print("No opening brace found")
+            return None
+            
+        # Count braces to find where JSON likely ends
+        brace_count = 0
+        end = start
+        for i in range(start, len(response_text)):
+            if response_text[i] == '{':
+                brace_count += 1
+            elif response_text[i] == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    end = i + 1
+                    break
+        
+        if end > start:
+            json_str = response_text[start:end]
+            print(f"Attempting to parse with brace counting (length: {len(json_str)})...")
+            try:
+                return json.loads(json_str)
+            except:
+                print(f"Still failed. Response preview: {json_str[:300]}...")
+                return None
+        else:
+            print(f"Could not find matching braces. Response: {response_text[:500]}...")
+            return None
+    except Exception as e:
+        print(f"Unexpected error: {e}")
         return None
 
 # --- Validation Functions ---
@@ -310,16 +233,19 @@ YOUR TASK:
 
 OUTPUT REQUIREMENTS:
 - Output ONLY valid JSON
+- Keep it concise - limit to 5-7 variables and 5-8 states maximum
 - Use this exact structure:
 {{
   "mission_id": "<mission_id_from_context>",
   "key_variables": [
-    {{"name": "variable_name", "type": "numeric|boolean|string", "description": "what it tracks"}}
+    {{"name": "battery_level", "type": "numeric", "description": "Battery percentage"}},
+    {{"name": "status", "type": "string", "description": "Current operational status"}}
   ],
   "key_states": [
-    {{"name": "state_name", "description": "what this state means"}}
+    {{"name": "idle", "description": "System waiting for commands"}},
+    {{"name": "active", "description": "System performing tasks"}}
   ],
-  "constraints": ["constraint1", "constraint2"]
+  "constraints": ["Must maintain connection", "Battery above 10%"]
 }}
 
 Generate the JSON now:
@@ -327,7 +253,8 @@ Generate the JSON now:
 <start_of_turn>model
 {{
 """
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=1024)
+    # Increase token limit to ensure complete response
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=1536)
     
     # Add opening brace if not present
     if not response.strip().startswith('{'):
@@ -350,6 +277,10 @@ def generate_overlay(canonical_context, model, tokenizer):
     """Generate state machine overlay from canonical context"""
     print("Generating Overlay...")
     
+    # Extract state names for easier reference
+    state_names = [s["name"] for s in canonical_context.get("key_states", [])]
+    variable_names = [v["name"] for v in canonical_context.get("key_variables", [])]
+    
     prompt = f"""<start_of_turn>user
 You are creating a state machine for a mission.
 
@@ -358,31 +289,33 @@ INPUT (Variables and States identified):
 
 YOUR TASK:
 Create a complete state machine with:
-1. All states from key_states, with specific actions for each
-2. Transitions between states based on the key_variables
-3. Conditions using the variables (e.g., "battery_level < 20", "status == 'ready'")
+1. Use these states: {', '.join(state_names)}
+2. Create transitions using these variables: {', '.join(variable_names)}
+3. Each state needs ONLY 2-3 brief actions (keep actions minimal and concise)
+4. Create logical transitions between states
 
 OUTPUT REQUIREMENTS:
 - Output ONLY valid JSON
-- mission_id MUST match the input: "{canonical_context.get('mission_id', '')}"
-- Each state needs a description and list of actions
-- Each transition needs: from, to, and condition
+- mission_id MUST be: "{canonical_context.get('mission_id', '')}"
+- Keep descriptions brief (one sentence)
+- Keep actions minimal (2-3 actions per state, using simple verbs)
+- Use simple conditions like: "battery_level < 20" or "status == 'ready'"
 - Use this EXACT structure:
 
 {{
   "mission_id": "{canonical_context.get('mission_id', '')}",
-  "initial_state": "<starting_state>",
+  "initial_state": "{state_names[0] if state_names else 'idle'}",
   "states": {{
-    "state_name": {{
-      "description": "description here",
+    "{state_names[0] if state_names else 'idle'}": {{
+      "description": "Brief description",
       "actions": ["action1", "action2"]
     }}
   }},
   "transitions": [
     {{
-      "from": "state1",
-      "to": "state2",
-      "condition": "variable_name > value"
+      "from": "{state_names[0] if state_names else 'idle'}",
+      "to": "{state_names[1] if len(state_names) > 1 else 'active'}",
+      "condition": "battery_level > 50"
     }}
   ]
 }}
@@ -392,7 +325,8 @@ Generate the complete state machine JSON now:
 <start_of_turn>model
 {{
 """
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=2048)
+    # Increase token limit for overlay generation
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=3072)
     
     # Add opening brace if not present
     if not response.strip().startswith('{'):
