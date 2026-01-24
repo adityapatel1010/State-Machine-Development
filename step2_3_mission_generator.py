@@ -206,7 +206,7 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=1024):
     # Decode only the NEW tokens
     generated_tokens = outputs[0][input_length:]
     response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-    print(f"DEBUG Response: {response[:200]}...")  # Show first 200 chars
+    print(f"DEBUG Response: {response}")  # Show first 200 chars
     return response
 
 def extract_json_from_response(response_text):
