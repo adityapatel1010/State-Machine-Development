@@ -78,7 +78,7 @@ def load_model():
             print("Or set HF_TOKEN environment variable.\n")
         raise e
 
-def generate_text(model, tokenizer, prompt, max_new_tokens=1024, stop_at_json=True):
+def generate_text(model, tokenizer, prompt, max_new_tokens=1024):
     """Generate text from model given a prompt"""
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     input_length = inputs.input_ids.shape[1]
@@ -86,33 +86,23 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=1024, stop_at_json=Tr
     outputs = model.generate(
         **inputs, 
         max_new_tokens=max_new_tokens,
-        temperature=0.0,
-        do_sample=False,
+        temperature=0.1,  # Slight temperature for better diversity
+        do_sample=True,
         pad_token_id=tokenizer.eos_token_id,
-        eos_token_id=tokenizer.eos_token_id
+        eos_token_id=tokenizer.eos_token_id,
+        top_p=0.9
     )
     
     # Decode only the NEW tokens
     generated_tokens = outputs[0][input_length:]
     response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
     
-    # If stop_at_json is True, truncate after the first complete JSON object
-    if stop_at_json:
-        start = response.find("{")
-        if start != -1:
-            brace_count = 0
-            for i in range(start, len(response)):
-                if response[i] == '{':
-                    brace_count += 1
-                elif response[i] == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        response = response[:i+1]
-                        break
-    
     # Show response length info
-    print(f"Generated {len(generated_tokens)} tokens ({len(response)} chars)")
-    print(f"Preview: {response[:150]}...")
+    print(f"Generated {len(generated_tokens)} tokens (~{len(response)} chars)")
+    if len(response) > 200:
+        print(f"Preview: {response}")
+    else:
+        print(f"Full response: {response}")
     
     return response
 
@@ -221,7 +211,7 @@ Output a concise summary list. If nothing relevant, say "None".
 <end_of_turn>
 <start_of_turn>model
 """
-    return generate_text(model, tokenizer, prompt, max_new_tokens=256)
+    return generate_text(model, tokenizer, prompt, max_new_tokens=1024)
 
 def generate_canonical_context(mission_context, aggregated_info, model, tokenizer):
     """Generate canonical context identifying key variables and states"""
