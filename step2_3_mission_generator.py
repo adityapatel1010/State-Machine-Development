@@ -298,8 +298,10 @@ Output JSON ONLY.
     return extract_json_from_response(response)
 
 def generate_overlay(canonical_context, model, tokenizer):
+    schema_json = Overlay.model_json_schema()
+    print("Pydantic Schema:")
+    print(json.dumps(schema_json, indent=2))
     print("Generating Overlay with Pydantic Schema...")
-    # schema_json = Overlay.model_json_schema() # Removed to prevent confusion
     
     prompt = f"""<start_of_turn>user
 Task: Generate a detailed State Machine Overlay JSON for the mission.
@@ -307,24 +309,13 @@ Task: Generate a detailed State Machine Overlay JSON for the mission.
 INPUT Context:
 {json.dumps(canonical_context, indent=2)}
 
-REFERENCE Template (Use this structure and level of detail):
-{SAMPLE_STATES}
-
 INSTRUCTIONS:
-1. Generate a valid JSON object for the mission defined in the INPUT Context.
-2. Use the 'REFERENCE Template' as a guide. You can adapt the states/transitions to fit the specific 'derived_security_profile' from the INPUT.
-3. IMPORTANT: The "mission_id" in your output MUST match the 'original_mission_id' from the INPUT Context.
-4. Provide detailed descriptions and specific actions for each state.
+1. Generate a valid JSON object.
+2. The output MUST strictly adhere to the following JSON Schema (Pydantic):
+{json.dumps(schema_json, indent=2)}
 
-Output format:
-{{
-  "mission_id": "...",
-  "state_machine": {{
-    "initial_state": "...",
-    "states": {{ ... }},
-    "transitions": [ ... ]
-  }}
-}}
+3. IMPORTANT: The "mission_id" in your output MUST match the 'original_mission_id' from the INPUT Context.
+4. Create specific, detailed states and actions relevant to the mission described in the INPUT Context. Do NOT just use generic placeholders.
 
 Output JSON ONLY.
 <end_of_turn>
