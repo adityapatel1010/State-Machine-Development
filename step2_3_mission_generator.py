@@ -276,13 +276,16 @@ INPUT 1: Mission Context
 INPUT 2: Aggregated Security Info
 {aggregated_info}
 
+INPUT 3: Sample States (For Inspiration/Context)
+{SAMPLE_STATES}
+
 INSTRUCTIONS:
 Create a NEW JSON object called 'Canonical Mission Context'.
 It MUST contain:
 - "original_mission_id": from Mission Context locaton.
-- "derived_security_profile": Object with environment and threat_model based on Security Info.
+- "derived_security_profile": Object with environment and threat_model based on Security Info and Sample States.
 - "operational_constraints": List of constraints from Security Info.
-- "implicit_context_expansion": A summary string.
+- "implicit_context_expansion": A summary string explaining how the Sample States apply to this mission.
 
 Do not just copy the input. Synthesize a new JSON.
 
@@ -296,23 +299,34 @@ Output JSON ONLY.
 
 def generate_overlay(canonical_context, model, tokenizer):
     print("Generating Overlay with Pydantic Schema...")
-    schema_json = Overlay.model_json_schema()
+    # schema_json = Overlay.model_json_schema() # Removed to prevent confusion
     
     prompt = f"""<start_of_turn>user
-Task: Generate a State Machine Overlay JSON based on the Canonical Mission Context.
+Task: Generate a detailed State Machine Overlay JSON for the mission.
 
 INPUT Context:
 {json.dumps(canonical_context, indent=2)}
 
+REFERENCE Template (Use this structure and level of detail):
+{SAMPLE_STATES}
+
 INSTRUCTIONS:
-You must generate a valid JSON object matching the structures defined in this Pydantic Schema:
-{json.dumps(schema_json, indent=2)}
+1. Generate a valid JSON object for the mission defined in the INPUT Context.
+2. Use the 'REFERENCE Template' as a guide. You can adapt the states/transitions to fit the specific 'derived_security_profile' from the INPUT.
+3. IMPORTANT: The "mission_id" in your output MUST match the 'original_mission_id' from the INPUT Context.
+4. Provide detailed descriptions and specific actions for each state.
 
-DESIGN REQUIREMENTS:
-- Create at least 3 distinct states relevant to the mission.
-- Define transitions that logically connect these states based on the security profile.
-- Return ONLY the JSON object, strictly adhering to the Pydantic format defined above.
+Output format:
+{{
+  "mission_id": "...",
+  "state_machine": {{
+    "initial_state": "...",
+    "states": {{ ... }},
+    "transitions": [ ... ]
+  }}
+}}
 
+Output JSON ONLY.
 <end_of_turn>
 <start_of_turn>model
 ```json
