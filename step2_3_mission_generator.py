@@ -7,7 +7,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from pypdf import PdfReader
 
 # Configuration
-MODEL_ID = "google/gemma-3-270m-it"
+MODEL_ID = "google/gemma-3-4b-it"
 CHUNK_SIZE = 1000  # Characters for rough chunking
 
 # Sample States for prompt customization - simplified to show only states and variables
@@ -257,7 +257,7 @@ IMPORTANT: Output ONLY the JSON object above. Do not add explanations, markdown,
 {{
 """
     # Increase token limit to ensure complete response
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=1024, stop_at_json=True)
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=1024)
     
     # Add opening brace if not present
     if not response.strip().startswith('{'):
@@ -351,7 +351,7 @@ IMPORTANT: Output ONLY the JSON object. Do not add explanations, markdown format
 {{
 """
     # Increase token limit for overlay generation
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=3072, stop_at_json=True)
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=3072)
     
     # Add opening brace if not present
     if not response.strip().startswith('{'):

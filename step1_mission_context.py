@@ -9,6 +9,8 @@ def save_json(data, path):
     with open(path, 'w') as f:
         json.dump(data, f, indent=2)
 
+import uuid
+
 def main():
     print("Step 1: Generating MissionContext.json...")
     
@@ -28,12 +30,18 @@ def main():
         print("Error: templates/generic_template.json not found.")
         return
 
-    # 3. Merge (Simple implicit understanding logic: just adding user fields to the template)
+    # 3. Merge
     mission_context = generic_template.copy()
     mission_context['mission_details'] = user_input
     mission_context['implicit_understanding'] = "Security and Threat Analysis Purpose"
     
-    # 4. Save Output
+    # 4. Generate Mission ID
+    # Use a persistent or deterministic ID if possible, but for now a new UUID ensures uniqueness
+    mission_id = f"mission_{uuid.uuid4().hex[:8]}"
+    mission_context['mission_id'] = mission_id
+    print(f"Generated Mission ID: {mission_id}")
+    
+    # 5. Save Output
     save_json(mission_context, 'MissionContext.json')
     print("Success: Created MissionContext.json")
 

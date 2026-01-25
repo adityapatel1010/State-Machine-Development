@@ -5,12 +5,12 @@ def validate_overlay(overlay):
     print("Validating Overlay...")
     errors = []
     
-    # Check basic structure
-    if "state_machine" not in overlay:
-        errors.append("Missing 'state_machine' key")
-        return False, errors
-    
-    sm = overlay["state_machine"]
+    # Check basic structure - Support both nested 'state_machine' and flat structure
+    if "state_machine" in overlay:
+        sm = overlay["state_machine"]
+    else:
+        # Flat structure fallback
+        sm = overlay
     
     # Check states
     if "states" not in sm or not isinstance(sm["states"], dict):
@@ -43,15 +43,16 @@ def validate_overlay(overlay):
 
 def compile_to_dsl(overlay):
     print("Compiling Overlay to MissionSpec DSL...")
-    # Transformations can happen here.
-    # For now, we wrap it in a DSL structure.
+    
+    # Handle flat vs nested structure
+    spec = overlay["state_machine"] if "state_machine" in overlay else overlay
     
     dsl = {
         "metadata": {
             "compiler_version": "1.0.0",
             "source_mission_id": overlay.get("mission_id", "unknown")
         },
-        "spec": overlay["state_machine"]
+        "spec": spec
     }
     
     # Add a checksum or signature mock
