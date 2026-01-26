@@ -277,102 +277,186 @@ def generate_overlay(canonical_context, model, tokenizer):
     prompt = f"""<start_of_turn>user
 You are StateMachineCompiler.
 
-GOAL
-Generate a mission state machine that is:
-- grounded ONLY in the provided mission context + allowed variables
-- consistent, minimal, and reliable
-- NOT a copy of the reference states (reference is style inspiration only)
-
-MISSION CONTEXT (SOURCE OF TRUTH)
+SOURCE OF TRUTH
+MISSION CONTEXT:
 {json.dumps(canonical_context, indent=2)}
 
 ALLOWED VARIABLES (closed world)
-You may ONLY reference these variables in transition conditions (no new variables, no synonyms):
-{', '.join(variable_names)}
+You may ONLY reference these variables in transition conditions.
+You may NOT invent new variables, aliases, or helper flags.
+Allowed: {', '.join(variable_names)}
 
-REFERENCE STATE PATTERNS (INSPIRATION ONLY)
-These are examples of wording/action style. Do NOT reuse state names or transitions unless they are truly required by THIS mission context.
+REFERENCE (STYLE ONLY, NOT CONTENT)
 {SAMPLE_STATES}
+Do NOT copy state names or thresholds from reference.
 
-MANDATORY CORE STATES
-You MUST include exactly these 4 core states by name (these are always present):
-- Normal
-- Escalation
-- Alert
-- Inform
+HARD REQUIREMENT: EXACTLY 10 STATES TOTAL
+You MUST output exactly 10 state objects in "states":
+- 4 fixed core states (must exist exactly once, exact names):
+  1) Normal
+  2) Escalation
+  3) Alert
+  4) Inform
+- PLUS exactly 6 custom states derived from the mission context.
 
-CUSTOM STATES
-You MAY add 1-4 additional mission-specific states if the mission context clearly demands them.
-Rules for custom state naming:
-- PascalCase
-- 1-3 words max
-- describe an observable operational mode (not a vague concept)
+CUSTOM STATE DERIVATION (NO GUESSWORK)
+Derive the 6 custom states by extracting the 6 most important "required operational modes" implied by the mission context.
+A "required operational mode" must be justified by explicit fields in the mission context (e.g., mission goals, constraints, sensors/feeds, policies, safety requirements, comms constraints, resource constraints, operator workflow).
+Do NOT invent modes that are not supported by mission context.
 
-ACTIONS RULES (anti-hallucination)
-Each state must have 2-3 actions.
-Actions must be simple verbs + object (snake_case), and must be feasible from the context.
-Examples of style: "monitor_feeds", "log_event", "notify_operator"
-Do NOT invent external systems, integrations, or sensors not implied by the mission context.
+CUSTOM STATE NAMING
+- PascalCase, 1-3 words
+- Not generic (avoid Monitoring, Handling, Managing, Processing unless mission context explicitly calls for it)
+- Must be distinct and cover different mission needs (no near-duplicates)
 
-TRANSITION RULES (anti-guesswork)
-- Every transition condition MUST use ONLY ALLOWED VARIABLES.
-- If you cannot express a transition condition using ONLY allowed variables, DO NOT include that transition.
-- Prefer simple conditions (comparisons, boolean checks) over complex logic.
-- No probabilities, no made-up thresholds unless the context provides them.
-- Ensure reachability: at least one transition out of each non-terminal state.
-- Ensure closure: at least one path back to Normal from Escalation/Alert/Inform.
+ACTIONS
+Each state MUST have exactly 3 actions.
+Actions MUST be snake_case and must be feasible given mission context (no invented integrations).
+Actions should be concrete and operational.
 
-OUTPUT SIZE
-- Total states: 5-8 (including the 4 mandatory core states)
-- Transitions: enough to make the machine coherent (typically 6-14)
+TRANSITIONS (STRICT)
+- Provide 12-20 transitions.
+- Every transition condition MUST use ONLY ALLOWED VARIABLES (verbatim).
+- No unconditional conditions like "true" or "always".
+- No made-up thresholds. Thresholds may only appear if the mission context explicitly contains them.
+  If context does NOT contain numeric thresholds, use relative comparisons or discrete enums already present in ALLOWED VARIABLES.
+- Ensure:
+  (a) At least 1 transition OUT of every state.
+  (b) At least 1 transition INTO every custom state.
+  (c) At least 1 de-escalation path back to Normal from Escalation/Alert/Inform.
+  (d) Alert must be reachable from Escalation (directly or indirectly).
 
-OUTPUT FORMAT (STRICT)
-Output ONLY valid JSON (no markdown, no comments, no extra text).
-The JSON MUST match EXACTLY this schema:
+INITIAL STATE
+initial_state MUST be "Normal"
+
+OUTPUT FORMAT
+Output ONLY valid JSON and EXACTLY this structure:
 
 {{
   "mission_id": "{canonical_context.get('mission_id','')}",
   "initial_state": "Normal",
   "states": {{
-    "Normal": {{
-      "description": "...",
-      "actions": ["...", "..."]
-    }},
-    "Escalation": {{
-      "description": "...",
-      "actions": ["...", "..."]
-    }},
-    "Alert": {{
-      "description": "...",
-      "actions": ["...", "..."]
-    }},
-    "Inform": {{
-      "description": "...",
-      "actions": ["...", "..."]
-    }}
-    // + 1-4 custom states here (if needed)
+    "Normal": {{"description": "...", "actions": ["...", "...", "..."]}},
+    "Escalation": {{"description": "...", "actions": ["...", "...", "..."]}},
+    "Alert": {{"description": "...", "actions": ["...", "...", "..."]}},
+    "Inform": {{"description": "...", "actions": ["...", "...", "..."]}}
+    // plus exactly 6 custom states
   }},
   "transitions": [
-    {{
-      "from": "Normal",
-      "to": "Escalation",
-      "condition": "..."
-    }}
-    // more transitions
+    {{"from": "...", "to": "...", "condition": "..."}}
   ]
 }}
 
-FINAL SELF-CHECK (silent; do not output)
-Before you output JSON, verify:
-1) All 4 core states exist exactly once with correct names
-2) Total states count is 5-8
-3) Every condition uses ONLY ALLOWED VARIABLES
-4) No transition references missing states
-5) Actions are 2-3 per state, snake_case, plausible from context
-
+FINAL SILENT VALIDATION (do not output)
+- Exactly 10 states total
+- Exactly 6 custom states
+- Exactly 3 actions per state
+- Conditions reference ONLY ALLOWED VARIABLES
+- No "true" condition
+- No numeric thresholds unless present in mission context
 <end_of_turn>
 <start_of_turn>model
 {{"""
+
+#     prompt = f"""<start_of_turn>user
+# You are StateMachineCompiler.
+
+# GOAL
+# Generate a mission state machine that is:
+# - grounded ONLY in the provided mission context + allowed variables
+# - consistent, minimal, and reliable
+# - NOT a copy of the reference states (reference is style inspiration only)
+
+# MISSION CONTEXT (SOURCE OF TRUTH)
+# {json.dumps(canonical_context, indent=2)}
+
+# ALLOWED VARIABLES (closed world)
+# You may ONLY reference these variables in transition conditions (no new variables, no synonyms):
+# {', '.join(variable_names)}
+
+# REFERENCE STATE PATTERNS (INSPIRATION ONLY)
+# These are examples of wording/action style. Do NOT reuse state names or transitions unless they are truly required by THIS mission context.
+# {SAMPLE_STATES}
+
+# MANDATORY CORE STATES
+# You MUST include exactly these 4 core states by name (these are always present):
+# - Normal
+# - Escalation
+# - Alert
+# - Inform
+
+# CUSTOM STATES
+# You MAY add 1-4 additional mission-specific states if the mission context clearly demands them.
+# Rules for custom state naming:
+# - PascalCase
+# - 1-3 words max
+# - describe an observable operational mode (not a vague concept)
+
+# ACTIONS RULES (anti-hallucination)
+# Each state must have 2-3 actions.
+# Actions must be simple verbs + object (snake_case), and must be feasible from the context.
+# Examples of style: "monitor_feeds", "log_event", "notify_operator"
+# Do NOT invent external systems, integrations, or sensors not implied by the mission context.
+
+# TRANSITION RULES (anti-guesswork)
+# - Every transition condition MUST use ONLY ALLOWED VARIABLES.
+# - If you cannot express a transition condition using ONLY allowed variables, DO NOT include that transition.
+# - Prefer simple conditions (comparisons, boolean checks) over complex logic.
+# - No probabilities, no made-up thresholds unless the context provides them.
+# - Ensure reachability: at least one transition out of each non-terminal state.
+# - Ensure closure: at least one path back to Normal from Escalation/Alert/Inform.
+
+# OUTPUT SIZE
+# - Total states: 5-8 (including the 4 mandatory core states)
+# - Transitions: enough to make the machine coherent (typically 6-14)
+
+# OUTPUT FORMAT (STRICT)
+# Output ONLY valid JSON (no markdown, no comments, no extra text).
+# The JSON MUST match EXACTLY this schema:
+
+# {{
+#   "mission_id": "{canonical_context.get('mission_id','')}",
+#   "initial_state": "Normal",
+#   "states": {{
+#     "Normal": {{
+#       "description": "...",
+#       "actions": ["...", "..."]
+#     }},
+#     "Escalation": {{
+#       "description": "...",
+#       "actions": ["...", "..."]
+#     }},
+#     "Alert": {{
+#       "description": "...",
+#       "actions": ["...", "..."]
+#     }},
+#     "Inform": {{
+#       "description": "...",
+#       "actions": ["...", "..."]
+#     }}
+#     // + 1-4 custom states here (if needed)
+#   }},
+#   "transitions": [
+#     {{
+#       "from": "Normal",
+#       "to": "Escalation",
+#       "condition": "..."
+#     }}
+#     // more transitions
+#   ]
+# }}
+
+# FINAL SELF-CHECK (silent; do not output)
+# Before you output JSON, verify:
+# 1) All 4 core states exist exactly once with correct names
+# 2) Total states count is 5-8
+# 3) Every condition uses ONLY ALLOWED VARIABLES
+# 4) No transition references missing states
+# 5) Actions are 2-3 per state, snake_case, plausible from context
+
+# <end_of_turn>
+# <start_of_turn>model
+# {{"""
     
 #     prompt = f"""<start_of_turn>user
 # You are creating a state machine for a mission.
