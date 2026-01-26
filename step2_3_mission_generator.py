@@ -275,16 +275,10 @@ SOURCE OF TRUTH
 MISSION CONTEXT:
 {json.dumps(canonical_context, indent=2)}
 
-ALLOWED VARIABLES (closed world)
-Transition conditions may ONLY use these variables (verbatim):
-{', '.join(variable_names)}
-
 HARD REQUIREMENTS
 1) EXACTLY 10 states total.
 2) Must include core states exactly: Normal, Escalation, Alert, Inform.
 3) The remaining 6 states MUST be sensor/VLM-evidence-driven operational modes implied by mission context.
-4) NO unconditional transitions ("true", "always").
-5) NO numeric thresholds unless explicitly present in mission context. If thresholds are not provided, use only boolean/enums already in ALLOWED VARIABLES.
 6) Every state must be reachable from Normal (possibly via other states).
 7) No dead states: each state must have at least one inbound and one outbound transition (except Alert may be terminal ONLY if mission context says so).
 8) Protocol logic required:
@@ -317,14 +311,12 @@ Output ONLY valid JSON with EXACT structure:
     // plus exactly 6 custom states
   }},
   "transitions": [
-    {{"from": "...", "to": "...", "condition": "..."}}
+    {{"from": "...", "to": "..."}}
   ]
 }}
 
 FINAL SILENT VALIDATION (do not output)
 - 10 states exactly
-- no "true"
-- no invented variables
 - all states reachable
 - assessment states have confirmed + cleared exits
 - Alert only via Escalation or confirmed severe hazard state
@@ -675,18 +667,80 @@ def main():
     print("=" * 60)
     overlay = generate_overlay(canonical_context, model, tokenizer)
     
-    if overlay:
-        output_file = 'OverLay.json'
-        with open(output_file, 'w') as f:
-            json.dump(overlay, f, indent=2)
-        print(f"✓ Success: Created {output_file}")
-        print(f"  - Mission ID: {overlay.get('mission_id')}")
-        print(f"  - Initial State: {overlay.get('initial_state')}")
-        print(f"  - Total States: {len(overlay.get('states', {}))}")
-        print(f"  - Total Transitions: {len(overlay.get('transitions', []))}")
     else:
         print("✗ Failed to generate Overlay")
         sys.exit(1)
+        
+    # 5b. Condition Generator (Refine Transitions)
+    print("\n" + "=" * 60)
+    print("Step 2b: Refining Transitions (Condition Generator)")
+    print("=" * 60)
+    
+    # Load parameters from sample_output.json
+    try:
+        with open('sample_output.json', 'r') as f:
+            sample_output = json.load(f)
+            # Filter for numeric or boolean only
+            valid_params = [
+                p for p in sample_output.get("parameters", []) 
+                if p["type"] in ["numeric", "boolean"]
+            ]
+            print(f"✓ Loaded {len(valid_params)} valid parameters (numeric/boolean) from sample_output.json")
+    except Exception as e:
+        print(f"⚠ Could not load sample_output.json: {e}")
+        valid_params = []
+
+    if valid_params:
+        refined_overlay = condition_generator(overlay, valid_params, model, tokenizer)
+        if refined_overlay:
+            overlay = refined_overlay
+            # Save again
+            with open('OverLay.json', 'w') as f:
+                json.dump(overlay, f, indent=2)
+            print(f"✓ Success: Updated OverLay.json with refined conditions")
+
+def condition_generator(overlay, parameters, model, tokenizer):
+    """Refine state transitions using specific numeric/boolean parameters"""
+    print("Refining transitions with Condition Generator...")
+    
+    param_list_str = "\n".join([f"- {p['name']} ({p['type']})" for p in parameters])
+    
+    prompt = f"""<start_of_turn>user
+You are a Logic Engineer.
+Your task is to REWRITE the transition conditions for the State Machine using ONLY the provided parameters.
+
+STATE MACHINE:
+{json.dumps(overlay, indent=2)}
+
+AVAILABLE PARAMETERS (Use ONLY these):
+{param_list_str}
+
+INSTRUCTIONS:
+1. Review the 'transitions' in the State Machine.
+2. Rewrite the 'condition' for each transition using specific logic based on the Available Parameters.
+3. Rules:
+   - Use numeric thresholds (e.g., "temperature > 45")
+   - Use boolean checks (e.g., "emergency_stop == true")
+   - Do NOT use parameters not listed above.
+   - If a transition cannot be expressed with these parameters, keep it simple or generic, but prefer using the parameters if possible.
+4. Output the FULL updated JSON object.
+
+Output JSON ONLY.
+<end_of_turn>
+<start_of_turn>model
+{{
+"""
+    # Increase token limit
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=3072)
+    
+    if not response.strip().startswith('{'):
+        response = '{' + response
+    
+    data = extract_json_from_response(response)
+    if data:
+        print("✓ Conditions refined successfully")
+        return data
+    return None
     
     print("\n" + "=" * 60)
     print("✓ All tasks completed successfully!")
