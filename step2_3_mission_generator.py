@@ -2,9 +2,14 @@ import json
 import os
 import torch
 import sys
+import numpy as np
+import pandas as pd
 from typing import List, Dict, Optional
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from pypdf import PdfReader
+from sentence_transformers import SentenceTransformer
+import docx
+import openpyxl
 
 # Configuration
 MODEL_ID = "google/gemma-3-4b-it"
@@ -30,11 +35,82 @@ def read_pdf(file_path):
         reader = PdfReader(file_path)
         text = ""
         for page in reader.pages:
-            text += page.extract_text() + "\n"
+            text_extracted = page.extract_text()
+            if text_extracted:
+                text += text_extracted + "\n"
         return text
     except Exception as e:
         print(f"Error reading PDF: {e}")
         return ""
+
+def read_docx(file_path):
+    """Read text from DOCX file"""
+    print(f"Reading DOCX: {file_path}")
+    try:
+        doc = docx.Document(file_path)
+        text = [para.text for para in doc.paragraphs]
+        return "\n".join(text)
+    except Exception as e:
+        print(f"Error reading DOCX: {e}")
+        return ""
+
+def read_excel(file_path):
+    """Read text from Excel file (all sheets)"""
+    print(f"Reading Excel: {file_path}")
+    try:
+        dfs = pd.read_excel(file_path, sheet_name=None)
+        text = []
+        for sheet_name, df in dfs.items():
+            text.append(f"--- Sheet: {sheet_name} ---")
+            text.append(df.to_string())
+        return "\n".join(text)
+    except Exception as e:
+        print(f"Error reading Excel: {e}")
+        return ""
+
+def read_document(file_path):
+    """Generic document reader dispatcher"""
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == '.pdf':
+        return read_pdf(file_path)
+    elif ext in ['.docx', '.doc']:
+        return read_docx(file_path)
+    elif ext in ['.xlsx', '.xls']:
+        return read_excel(file_path)
+    elif ext in ['.txt', '.md', '.json', '.log']:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            print(f"Error reading text file: {e}")
+            return ""
+    else:
+        print(f"Unsupported file format: {ext}")
+        return ""
+
+def get_relevant_chunks(chunks, query, top_k=5):
+    """RAG: Select top_k chunks most relevant to the query"""
+    print("Initializing Sentence Transformer for RAG...")
+    embedder = SentenceTransformer('all-MiniLM-L6-v2')
+    
+    print(f"Encoding {len(chunks)} chunks...")
+    corpus_embeddings = embedder.encode(chunks, convert_to_tensor=True)
+    query_embedding = embedder.encode(query, convert_to_tensor=True)
+    
+    # Cosine similarity
+    from sentence_transformers import util
+    cos_scores = util.cos_sim(query_embedding, corpus_embeddings)[0]
+    
+    # Get top k
+    top_results = torch.topk(cos_scores, k=min(top_k, len(chunks)))
+    
+    relevant_chunks = []
+    print("\nTop Relevant Chunks:")
+    for score, idx in zip(top_results[0], top_results[1]):
+        print(f"  - Score: {score:.4f}")
+        relevant_chunks.append(chunks[idx])
+        
+    return relevant_chunks
 
 def chunk_text(text, size=CHUNK_SIZE):
     """Split text into chunks for processing"""
@@ -583,6 +659,75 @@ FINAL SILENT VALIDATION (do not output)
             return None
     return None
 
+
+def condition_generator(overlay, model, tokenizer):
+    """Refine transition conditions using sample parameters"""
+    print("\nStarting Condition Generator...")
+    
+    # 1. Load Parameters
+    try:
+        with open('sample_output.json', 'r') as f:
+            data = json.load(f)
+            params = data.get("parameters", {})
+    except FileNotFoundError:
+        print("sample_output.json not found, skipping condition refinement.")
+        return overlay
+
+    # 2. Filter Numeric/Boolean
+    valid_params = {}
+    for k, v in params.items():
+        if isinstance(v, (int, float, bool)) or (isinstance(v, str) and v.lower() in ['true', 'false']):
+            valid_params[k] = v
+            
+    if not valid_params:
+        print("No valid numeric/boolean parameters found.")
+        return overlay
+
+    print(f"Using parameters for conditions: {list(valid_params.keys())}")
+    
+    # 3. Refine Transitions - Modify in place to preserve all other fields
+    transitions = overlay.get("transitions", [])
+    
+    for i, t in enumerate(transitions):
+        from_state = t.get("from")
+        to_state = t.get("to")
+        # We only want to generate a condition if one doesn't exist or we want to overwrite it.
+        # The prompt asks to "create conditions", implying we add/overwrite.
+        
+        print(f"Refining transition {i+1}/{len(transitions)}: {from_state} -> {to_state}")
+        
+        prompt = f"""<start_of_turn>user
+Task: Create a boolean condition for this state transition based on the available parameters.
+
+Transition: {from_state} -> {to_state}
+
+Available Variables:
+{json.dumps(valid_params, indent=2)}
+
+Instructions:
+1. Write a SINGLE line python-style boolean condition
+2. Use ONLY the variables listed above.
+3. Logic should make sense for moving from '{from_state}' to '{to_state}'.
+4. Output ONLY the condition string. No explanations.
+
+Condition:
+<end_of_turn>
+<start_of_turn>model
+"""
+        # Generate condition
+        new_cond = generate_text(model, tokenizer, prompt, max_new_tokens=64).strip()
+        
+        # Cleanup
+        new_cond = new_cond.strip('"`')
+        # Remove markdown code blocks if any
+        new_cond = new_cond.replace('```python', '').replace('```', '').strip()
+        
+        print(f"  -> Generated: {new_cond}")
+        t["condition"] = new_cond
+        
+    # The 'transitions' list contains references to dicts inside 'overlay', so overlay is updated.
+    return overlay
+
 def main():
     """Main execution function"""
     print("=" * 60)
@@ -606,42 +751,55 @@ def main():
         print("✗ MissionContext.json not found.")
         sys.exit(1)
 
-    # 2. Read PDF Documents (or txt fallback)
-    pdf_path = 'data/documents.pdf'
-    txt_path = 'data/documents.txt'
-    
-    doc_text = ""
-    if os.path.exists(pdf_path):
-        doc_text = read_pdf(pdf_path)
-        print(f"✓ Loaded PDF document ({len(doc_text)} characters)")
-    elif os.path.exists(txt_path):
-        print("PDF not found, falling back to text file.")
-        with open(txt_path, 'r') as f:
-            doc_text = f.read()
-        print(f"✓ Loaded text document ({len(doc_text)} characters)")
-    else:
-        print("✗ No document found in data/")
-        sys.exit(1)
-
     # 3. Process Documents (Chunk & Extract)
     print("\n" + "=" * 60)
-    print("Processing Document Chunks...")
+    print("Processing Document Chunks (RAG Pipeline)...")
     print("=" * 60)
-    chunks = chunk_text(doc_text)
-    aggregated_info = ""
     
-    # Limit to first 5 chunks for demo efficiency
-    max_chunks = min(5, len(chunks))
-    for i, chunk in enumerate(chunks[:max_chunks]):
-        print(f" - Analyzing chunk {i+1}/{max_chunks}...")
+    # Collect all chunks
+    all_chunks = []
+    
+    # Support multiple files in data/ directory
+    data_dir = 'data'
+    if os.path.exists(data_dir):
+        for filename in os.listdir(data_dir):
+            file_path = os.path.join(data_dir, filename)
+            if os.path.isfile(file_path) and not filename.startswith('.'):
+                text = read_document(file_path)
+                if text:
+                    file_chunks = chunk_text(text)
+                    print(f"Loaded {filename}: {len(file_chunks)} chunks")
+                    all_chunks.extend(file_chunks)
+    
+    if not all_chunks:
+        print("✗ No document content found in data/")
+        # Fallback to empty context or exit?
+        # Let's try to proceed if we have a mission summary at least
+        # But for now, exit as documents are key
+        pass
+
+    # RAG Selection
+    mission_summary = mission_context.get("mission_summary", "") + " " + \
+                      mission_context.get("location", "") + " " + \
+                      str(mission_context.get("operational_hours", ""))
+                      
+    if all_chunks:
+        print(f"\nPerforming RAG retrieval for query: '{mission_summary}'")
+        relevant_chunks = get_relevant_chunks(all_chunks, mission_summary, top_k=5)
+    else:
+        relevant_chunks = []
+
+    aggregated_info = ""
+    for i, chunk in enumerate(relevant_chunks):
+        print(f" - Analyzing relevant chunk {i+1}...")
         info = extract_security_info(chunk, model, tokenizer)
         if "None" not in info and info.strip():
-            aggregated_info += f"\nChunk {i+1} summary: {info}"
+            aggregated_info += f"\n--- Source Chunk {i+1} ---\n{info}\n"
     
     if not aggregated_info.strip():
         aggregated_info = "No specific security or operational constraints found in documents."
     
-    print(f"✓ Aggregated info from {max_chunks} chunks")
+    print(f"✓ Aggregated info from {len(relevant_chunks)} relevant chunks")
 
     # 4. Generate Canonical Context
     print("\n" + "=" * 60)
@@ -667,80 +825,24 @@ def main():
     print("=" * 60)
     overlay = generate_overlay(canonical_context, model, tokenizer)
     
+    if overlay:
+        # 6. Apply Condition Generator
+        print("\n" + "=" * 60)
+        print("Step 3: Refining Conditions with Condition Generator")
+        print("=" * 60)
+        overlay = condition_generator(overlay, model, tokenizer)
+        
+        output_file = 'OverLay.json'
+        with open(output_file, 'w') as f:
+            json.dump(overlay, f, indent=2)
+        print(f"✓ Success: Created {output_file}")
+        print(f"  - Mission ID: {overlay.get('mission_id')}")
+        print(f"  - Initial State: {overlay.get('initial_state')}")
+        print(f"  - Total States: {len(overlay.get('states', {}))}")
+        print(f"  - Total Transitions: {len(overlay.get('transitions', []))}")
     else:
         print("✗ Failed to generate Overlay")
         sys.exit(1)
-        
-    # 5b. Condition Generator (Refine Transitions)
-    print("\n" + "=" * 60)
-    print("Step 2b: Refining Transitions (Condition Generator)")
-    print("=" * 60)
-    
-    # Load parameters from sample_output.json
-    try:
-        with open('sample_output.json', 'r') as f:
-            sample_output = json.load(f)
-            # Filter for numeric or boolean only
-            valid_params = [
-                p for p in sample_output.get("parameters", []) 
-                if p["type"] in ["numeric", "boolean"]
-            ]
-            print(f"✓ Loaded {len(valid_params)} valid parameters (numeric/boolean) from sample_output.json")
-    except Exception as e:
-        print(f"⚠ Could not load sample_output.json: {e}")
-        valid_params = []
-
-    if valid_params:
-        refined_overlay = condition_generator(overlay, valid_params, model, tokenizer)
-        if refined_overlay:
-            overlay = refined_overlay
-            # Save again
-            with open('OverLay.json', 'w') as f:
-                json.dump(overlay, f, indent=2)
-            print(f"✓ Success: Updated OverLay.json with refined conditions")
-
-def condition_generator(overlay, parameters, model, tokenizer):
-    """Refine state transitions using specific numeric/boolean parameters"""
-    print("Refining transitions with Condition Generator...")
-    
-    param_list_str = "\n".join([f"- {p['name']} ({p['type']})" for p in parameters])
-    
-    prompt = f"""<start_of_turn>user
-You are a Logic Engineer.
-Your task is to REWRITE the transition conditions for the State Machine using ONLY the provided parameters.
-
-STATE MACHINE:
-{json.dumps(overlay, indent=2)}
-
-AVAILABLE PARAMETERS (Use ONLY these):
-{param_list_str}
-
-INSTRUCTIONS:
-1. Review the 'transitions' in the State Machine.
-2. Rewrite the 'condition' for each transition using specific logic based on the Available Parameters.
-3. Rules:
-   - Use numeric thresholds (e.g., "temperature > 45")
-   - Use boolean checks (e.g., "emergency_stop == true")
-   - Do NOT use parameters not listed above.
-   - If a transition cannot be expressed with these parameters, keep it simple or generic, but prefer using the parameters if possible.
-4. Output the FULL updated JSON object.
-
-Output JSON ONLY.
-<end_of_turn>
-<start_of_turn>model
-{{
-"""
-    # Increase token limit
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=3072)
-    
-    if not response.strip().startswith('{'):
-        response = '{' + response
-    
-    data = extract_json_from_response(response)
-    if data:
-        print("✓ Conditions refined successfully")
-        return data
-    return None
     
     print("\n" + "=" * 60)
     print("✓ All tasks completed successfully!")

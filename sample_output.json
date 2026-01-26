@@ -1,34 +1,12 @@
 {
-    "parameters": [
-        {
-            "name": "temperature",
-            "type": "numeric",
-            "description": "Vessel temperature in Celsius"
-        },
-        {
-            "name": "pressure",
-            "type": "numeric",
-            "description": "Internal pressure in bar"
-        },
-        {
-            "name": "chemical_ppm",
-            "type": "numeric",
-            "description": "Leak sensor reading ppm"
-        },
-        {
-            "name": "emergency_stop",
-            "type": "boolean",
-            "description": "Manual kill switch engaged"
-        },
-        {
-            "name": "valve_status",
-            "type": "string",
-            "description": "Valve position (open/closed)"
-        },
-        {
-            "name": "vibration_level",
-            "type": "numeric",
-            "description": "Pump vibration g-force"
-        }
-    ]
+    "parameters": {
+        "temperature_celsius": 42.5,
+        "pressure_bar": 12.0,
+        "vibration_g": 0.4,
+        "coolant_flow_rate": 150.0,
+        "valve_status": "open",
+        "maintenance_mode": "false",
+        "emergency_stop_active": false,
+        "leak_detected_ppm": 0.0
+    }
 }

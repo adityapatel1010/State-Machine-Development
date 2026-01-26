@@ -4,3 +4,9 @@ accelerate
 pydantic
 pypdf
 hf_transfer
+sentence-transformers
+numpy
+pandas
+openpyxl
+python-docx
+pillow
