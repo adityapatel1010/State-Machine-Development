@@ -1,0 +1,46 @@
+OUTPUT (flat line, no markdown):
+Summary=2 concise sentences: 1) overall scene; 2) micro-details/transients including hazard object if any;
+POI_Summary=[{id: P-POI or Group,
+  summary: ≤20 words describing ONLY the distinguishing action,
+  posture, or micro-behavior that makes this POI relevant,
+  with minimal visible attributes strictly necessary to identify them.}];
+Chain=cause→effect or stability ≤35 words;
+Category=SafetyViolation | NearMiss | Accident | QualityDefect | ProcessDeviation | FlowDisruption | MaterialIssue | MaintenanceIssue | Contamination | FireHazard | Accident | Traffic | GroupBehavior | Loitering | Normal;
+IncidentType=1|2|3|4|5;
+ZoneType=Safe |Hazard | Unknown;
+TransientLevel=0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+Status=Escalating | Stable | Deescalating;
+P-POI=description|None;
+S-POI=description|None;
+O-POI=description|None;
+Entities=[list]|[];
+Objects=[list]|[];
+Prediction=...;
+PredictionCategory=...;
+ContextDetectedScenarios=[...]|[];
+Probability % of escalation=[only if Category≠Normal];
+Time estimate of escalation=[only if Category≠Normal];
+PossibleConcerns=[...];
+CollisionRisk= 0-100;
+Close-pass/encroachment = 0-100;
+Unstable load risk = 0-100;
+Trip/slip Hazard= ...;
+Ergonomic strain posture= ….;
+Bottleneck = forming | propagating | queue growth | upstream ripple;
+Takt/cycle delay = Yes/No;
+Mechanical issue/jam= description | None;
+Process error/rework = misalignment | repeated correction| wrong placement;
+Material shortage/empty feed= reaching into empty bin, waiting for parts, feeder empty;
+Non-productive motion=searching, wandering, repeated reach without completion;
+Phantom pause= work stops but no clear task completion/reason visible;
+Material waste=scrap increase, spillage, overfill, discard;
+Energy waste =equipment running idle, lights/motors on with no work;
+Operator= struggling/fumbling, describe in <10 words;
+Fatigue gesture / slowed cadence=slump| stretch| slower motion| or anything else;
+Workflow deviation/shortcut = unsafe method | bypass visible;
+Team coordination= handoff delay |  waiting on another person| crowding mismatch;
+PPE= Missing|Good|Unknown;
+Lockout/tagout integrity= 0-100;
+Contamination/foreign material risk = describe if any;
+Risk= 2 concise sentences: 1) Most important risk; 2) flow loss including hazard object if any;
+RecommendationAction= NONE / MONITOR / ALERT / SLOW_FLOW / STOP_LINE / DISPATCH_MAINT / DISPATCH_SUP / DISPATCH_MATERIAL;

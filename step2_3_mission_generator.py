@@ -10,31 +10,12 @@ from pypdf import PdfReader
 MODEL_ID = "google/gemma-3-4b-it"
 CHUNK_SIZE = 1000  # Characters for rough chunking
 
-# Sample States for prompt customization - simplified to show only states and variables
+# Sample States for prompt customization - Industrial Anomaly Detection
 SAMPLE_STATES = """
-EXAMPLE - Lunar Rover Mission:
-
-Key Variables:
-- battery_level (numeric): Current battery percentage
-- position (string): Current location coordinates
-- connection_status (boolean): Link to mission control
-- diagnostics_passed (boolean): System health check result
-- at_target_location (boolean): Whether rover reached destination
-- data_ready (boolean): Science data ready for transmission
-- fault_detected (boolean): Critical system fault indicator
-
-Key States:
-- powered_off: System is shut down
-- booting: Starting up and running checks
-- idle: Ready and waiting for commands
-- navigating: Moving to target location
-- science_operations: Conducting experiments
-- communicating: Transmitting/receiving data
-- charging: Replenishing battery power
-- safe_mode: Emergency protective state
-- mission_complete: All objectives finished
-
-Note: The model should create appropriate transitions between these states based on the variables.
+- Normal: System operating within all safety parameters.
+- Monitoring: Minor deviation detected; increased sampling rate active.
+- Escalation: Thresholds exceeded; automated mitigation (e.g. pumps) engaged.
+- Alert: Critical hazard condition; full evacuation and shutdown.
 """
 
 # --- Helpers ---
@@ -226,7 +207,7 @@ SECURITY/OPERATIONAL INFO:
 {aggregated_info}
 
 YOUR TASK:
-Identify KEY VARIABLES that will change during the mission and need to be monitored.
+Identify KEY VARIABLES that will change during the mission and need to be monitored. 
 
 Examples of variables:
 - battery_level (numeric): Battery percentage
@@ -292,64 +273,162 @@ def generate_overlay(canonical_context, model, tokenizer):
     
     # Extract variable names for easier reference
     variable_names = [v["name"] for v in canonical_context.get("key_variables", [])]
-    
-    prompt = f"""<start_of_turn>user
-You are creating a state machine for a mission.
 
-MISSION CONTEXT WITH VARIABLES:
+    prompt = f"""<start_of_turn>user
+You are StateMachineCompiler.
+
+GOAL
+Generate a mission state machine that is:
+- grounded ONLY in the provided mission context + allowed variables
+- consistent, minimal, and reliable
+- NOT a copy of the reference states (reference is style inspiration only)
+
+MISSION CONTEXT (SOURCE OF TRUTH)
 {json.dumps(canonical_context, indent=2)}
 
-REFERENCE STATES (Select and adapt the relevant ones for this mission):
+ALLOWED VARIABLES (closed world)
+You may ONLY reference these variables in transition conditions (no new variables, no synonyms):
+{', '.join(variable_names)}
+
+REFERENCE STATE PATTERNS (INSPIRATION ONLY)
+These are examples of wording/action style. Do NOT reuse state names or transitions unless they are truly required by THIS mission context.
 {SAMPLE_STATES}
 
-YOUR TASK:
-1. Analyze the mission context and variables
-2. Select the MOST RELEVANT states from the reference states above
-3. You can also create new states if needed for this specific mission
-4. Create transitions between states using the key_variables: {', '.join(variable_names)}
-5. Each state should have 2-3 brief, specific actions
+MANDATORY CORE STATES
+You MUST include exactly these 4 core states by name (these are always present):
+- Normal
+- Escalation
+- Alert
+- Inform
 
-OUTPUT REQUIREMENTS:
-- Output ONLY valid JSON, nothing else
-- mission_id MUST be: "{canonical_context.get('mission_id', '')}"
-- Select 5-8 most important states for this mission
-- Keep descriptions brief (one sentence)
-- Keep actions minimal (2-3 actions per state, using simple verbs)
-- Create logical transitions using conditions like: "battery_level < 20" or "status == 'ready'"
-- Use EXACTLY this structure:
+CUSTOM STATES
+You MAY add 1-4 additional mission-specific states if the mission context clearly demands them.
+Rules for custom state naming:
+- PascalCase
+- 1-3 words max
+- describe an observable operational mode (not a vague concept)
+
+ACTIONS RULES (anti-hallucination)
+Each state must have 2-3 actions.
+Actions must be simple verbs + object (snake_case), and must be feasible from the context.
+Examples of style: "monitor_feeds", "log_event", "notify_operator"
+Do NOT invent external systems, integrations, or sensors not implied by the mission context.
+
+TRANSITION RULES (anti-guesswork)
+- Every transition condition MUST use ONLY ALLOWED VARIABLES.
+- If you cannot express a transition condition using ONLY allowed variables, DO NOT include that transition.
+- Prefer simple conditions (comparisons, boolean checks) over complex logic.
+- No probabilities, no made-up thresholds unless the context provides them.
+- Ensure reachability: at least one transition out of each non-terminal state.
+- Ensure closure: at least one path back to Normal from Escalation/Alert/Inform.
+
+OUTPUT SIZE
+- Total states: 5-8 (including the 4 mandatory core states)
+- Transitions: enough to make the machine coherent (typically 6-14)
+
+OUTPUT FORMAT (STRICT)
+Output ONLY valid JSON (no markdown, no comments, no extra text).
+The JSON MUST match EXACTLY this schema:
 
 {{
-  "mission_id": "{canonical_context.get('mission_id', '')}",
-  "initial_state": "idle",
+  "mission_id": "{canonical_context.get('mission_id','')}",
+  "initial_state": "Normal",
   "states": {{
-    "idle": {{
-      "description": "System waiting for commands",
-      "actions": ["monitor_systems", "listen_for_commands"]
+    "Normal": {{
+      "description": "...",
+      "actions": ["...", "..."]
     }},
-    "active": {{
-      "description": "System performing operations",
-      "actions": ["execute_tasks", "update_status"]
+    "Escalation": {{
+      "description": "...",
+      "actions": ["...", "..."]
+    }},
+    "Alert": {{
+      "description": "...",
+      "actions": ["...", "..."]
+    }},
+    "Inform": {{
+      "description": "...",
+      "actions": ["...", "..."]
     }}
+    // + 1-4 custom states here (if needed)
   }},
   "transitions": [
     {{
-      "from": "idle",
-      "to": "active",
-      "condition": "command_received == true"
-    }},
-    {{
-      "from": "active",
-      "to": "idle",
-      "condition": "task_complete == true"
+      "from": "Normal",
+      "to": "Escalation",
+      "condition": "..."
     }}
+    // more transitions
   ]
 }}
 
-IMPORTANT: Output ONLY the JSON object. Do not add explanations, markdown formatting, or any other text.
+FINAL SELF-CHECK (silent; do not output)
+Before you output JSON, verify:
+1) All 4 core states exist exactly once with correct names
+2) Total states count is 5-8
+3) Every condition uses ONLY ALLOWED VARIABLES
+4) No transition references missing states
+5) Actions are 2-3 per state, snake_case, plausible from context
+
 <end_of_turn>
 <start_of_turn>model
-{{
-"""
+{{"""
+    
+#     prompt = f"""<start_of_turn>user
+# You are creating a state machine for a mission.
+
+# MISSION CONTEXT WITH VARIABLES:
+# {json.dumps(canonical_context, indent=2)}
+
+# YOUR TASK:
+# 1. Analyze the mission context and variables
+# 2. Select the MOST RELEVANT states from the reference states above
+# 3. You can also create new states if needed for this specific mission
+# 4. Create transitions between states using the key_variables: {', '.join(variable_names)}
+# 5. Each state should have 2-3 brief, specific actions
+# 6. Keep these states inside the state machine : Normal, Escalation, Alert, Inform
+
+# OUTPUT REQUIREMENTS:
+# - Output ONLY valid JSON, nothing else
+# - mission_id MUST be: "{canonical_context.get('mission_id', '')}"
+# - Select 5-8 most important states for this mission
+# - Keep descriptions brief (one sentence)
+# - Keep actions minimal (2-3 actions per state, using simple verbs)
+# - Create logical transitions using conditions like: "battery_level < 20" or "status == 'ready'"
+# - Use EXACTLY this structure:
+
+# {{
+#   "mission_id": "{canonical_context.get('mission_id', '')}",
+#   "initial_state": "idle",
+#   "states": {{
+#     "idle": {{
+#       "description": "System waiting for commands",
+#       "actions": ["monitor_systems", "listen_for_commands"]
+#     }},
+#     "active": {{
+#       "description": "System performing operations",
+#       "actions": ["execute_tasks", "update_status"]
+#     }}
+#   }},
+#   "transitions": [
+#     {{
+#       "from": "idle",
+#       "to": "active",
+#       "condition": "command_received == true"
+#     }},
+#     {{
+#       "from": "active",
+#       "to": "idle",
+#       "condition": "task_complete == true"
+#     }}
+#   ]
+# }}
+
+# IMPORTANT: Output ONLY the JSON object. Do not add explanations, markdown formatting, or any other text.
+# <end_of_turn>
+# <start_of_turn>model
+# {{
+# """
     # Increase token limit for overlay generation
     response = generate_text(model, tokenizer, prompt, max_new_tokens=3072)
     

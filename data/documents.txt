@@ -1,17 +1,23 @@
-# Lunar Rover Mission Guidelines
-The primary objective is autonomous exploration and sample collection on the lunar surface.
-All operations must prioritize battery conservation during eclipse periods.
+# Industrial Safety Protocols: Hazardous Material Monitoring
+Compliance Standard: ISO-45001 / OSHA 1910.119 (Process Safety Management)
 
-# Navigation Protocols
-1. Autonomous Pathfinding: Avoid craters > 2m depth.
-2. Communication: Maintain Line-of-Sight with Relay Orbiter.
-3. Keep-Out Zones: Historic landing sites are strictly off-limits (500m buffer).
+# 1. Operational Thresholds
+- **Temperature**: Maintain containment vessel between 15°C and 45°C.
+  - *Warning limit*: >50°C.
+  - *Critical limit*: >65°C requires immediate cooling flush.
+- **Pressure**: Normal operating range 10-15 bar.
+  - *Trip limit*: >18 bar triggers automatic relief valve.
 
-# Power Management
-- Solar arrays must be deployed when sun elevation > 5 degrees.
-- Enter 'Hibernation' mode if battery drops below 20%.
+# 2. Anomaly Detection Guidelines
+- **Leak Detection**: Chemical sensors must poll every 500ms. 
+  - Trace levels (>5ppm) initiate 'Investigation' state.
+  - High levels (>50ppm) initiate 'Emergency Evacuation'.
+- **Vibration Analysis**: Continuous monitoring of pump bearings.
+  - Sudden spike (>3g) indicates potential mechanical failure.
 
-# Sample Collection
-- Target regolith rich in Helium-3.
-- Drill depth maximum: 50cm.
-- Abort drilling if torque exceeds 80Nm.
+# 3. Emergency Response
+- In case of "Confirmed Leak":
+  - Activate containment doors.
+  - Trigger site-wide alarm.
+  - Notify Hazardous Response Team (HazMat).
+- **Power Loss Protocol**: Switch to UPS, gracefully shut down non-critical feeds, maintain sensor grid.

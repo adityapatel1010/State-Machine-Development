@@ -1,5 +1,5 @@
 {
-    "mission_summary": "Autonomous geological survey of Shackleton Crater.",
-    "location": "Lunar South Pole",
-    "operational_hours": "Continuous (solar driven)"
+    "mission_summary": "Continuous monitoring of Chemical Storage Unit B for thermal runaway or leaks.",
+    "location": "Industrial Zone 4 - Storage Facility",
+    "operational_hours": "24/7 Automated Monitoring"
 }
