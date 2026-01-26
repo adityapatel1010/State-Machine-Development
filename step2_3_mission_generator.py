@@ -198,41 +198,35 @@ def generate_canonical_context(mission_context, aggregated_info, model, tokenize
     """Generate canonical context identifying key variables and states"""
     print("Generating Canonical Context...")
     prompt = f"""<start_of_turn>user
-You are analyzing a mission to identify key variables that need to be tracked.
+You are analyzing a mission to identify UNIQUE states and variables specific to this domain.
 
 MISSION CONTEXT:
 {json.dumps(mission_context, indent=2)}
 
-SECURITY/OPERATIONAL INFO:
+SECURITY/OPERATIONAL INFO (Domain Knowledge):
 {aggregated_info}
 
 YOUR TASK:
-Identify KEY VARIABLES that will change during the mission and need to be monitored. 
-
-Examples of variables:
-- battery_level (numeric): Battery percentage
-- connection_status (boolean): Link status
-- position (string): Current location
-- temperature (numeric): System temperature
-- mode (string): Operating mode
+Identify KEY VARIABLES and POTENTIAL STATES that are unique to this domain.
+Do not output generic placeholders. Use the domain terms found in the documents (e.g., specific chemical names, process states, specific sensor types).
 
 OUTPUT REQUIREMENTS:
-- Output ONLY valid JSON, nothing else
-- Keep it concise - limit to 5-8 variables maximum
-- Include only variables that are critical for state transitions
-- Do NOT include "key_states" - only variables and constraints
-- Use EXACTLY this structure with NO additional fields:
+- Output ONLY valid JSON.
+- "key_variables": 5-8 variables critical for this specific mission (e.g., 'reactor_pressure', 'valve_b_status').
+- "constraints": Operational limits found in the documents.
+- "unique_states": A list of potential states implied by the documents (e.g., 'Thermal_Runaway', 'High_Pressure_Vent').
 
+Use EXACTLY this structure:
 {{
   "mission_id": "<use the exact mission_id from context>",
   "key_variables": [
-    {{"name": "battery_level", "type": "numeric", "description": "Battery percentage"}},
-    {{"name": "status", "type": "string", "description": "Current operational status"}}
+    {{"name": "variable_name", "type": "numeric/string", "description": "Description"}}
   ],
-  "constraints": ["Must maintain connection", "Battery above 10%"]
+  "constraints": ["Constraint 1", "Constraint 2"],
+  "unique_states": ["State1", "State2"]
 }}
 
-IMPORTANT: Output ONLY the JSON object above. Do not add explanations, markdown, or any other text.
+IMPORTANT: Output ONLY the JSON object above.
 <end_of_turn>
 <start_of_turn>model
 {{
