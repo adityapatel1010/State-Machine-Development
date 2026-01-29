@@ -242,9 +242,12 @@ def validate_overlay(data):
             return False, f"State '{state_name}' actions must be a list"
     
     # Validate transition structure
+    # Validate transition structure
     for i, trans in enumerate(data["transitions"]):
-        if not all(k in trans for k in ["from", "to", "condition"]):
-            return False, f"Transition {i} missing required fields (from, to, condition)"
+        if not all(k in trans for k in ["from", "to"]):
+            return False, f"Transition {i} missing required fields (from, to)"
+            
+        # condition is optional initially (added by condition_generator)
     
     return True, "Valid"
 
@@ -367,7 +370,7 @@ TRANSITIONS (MANDATORY)
 For each non-core custom state you create, you MUST define:
 - a "confirmed" exit transition (hazard confirmed/persists -> mitigation/escalation)
 - a "cleared" exit transition (evidence clears -> Normal or lower severity)
-These conditions must use ALLOWED VARIABLES only.
+Do NOT define conditions for transitions.
 
 OUTPUT FORMAT
 Output ONLY valid JSON with EXACT structure:
@@ -613,16 +616,14 @@ FINAL SILENT VALIDATION (do not output)
 #       "actions": ["execute_tasks", "update_status"]
 #     }}
 #   }},
-#   "transitions": [
+#     "transitions": [
 #     {{
 #       "from": "idle",
-#       "to": "active",
-#       "condition": "command_received == true"
+#       "to": "active"
 #     }},
 #     {{
 #       "from": "active",
-#       "to": "idle",
-#       "condition": "task_complete == true"
+#       "to": "idle"
 #     }}
 #   ]
 # }}
@@ -690,7 +691,7 @@ def condition_generator(overlay, model, tokenizer):
         print(f"Refining transition {i+1}/{len(transitions)}: {from_state} -> {to_state}")
         
         prompt = f"""<start_of_turn>user
-Task: Create conditions for state transition based on the available parameters.
+Task: Create conditions for this state transition based on the available parameters.
 
 Transition: {from_state} -> {to_state}
 
@@ -702,6 +703,7 @@ Instructions:
 2. Use ONLY the variables listed above.
 3. Logic should make sense for moving from '{from_state}' to '{to_state}'.
 4. Output ONLY the condition string. No explanations.
+5. If no condition is needed (always true), output "True".
 
 Condition:
 <end_of_turn>
