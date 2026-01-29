@@ -699,7 +699,7 @@ def condition_generator(overlay, model, tokenizer):
             # Check for Enums "|"
             elif "|" in val:
                 is_usable = True
-                metadata = f"Categories: {val}"
+                metadata = f"Strict Categories (Allowed Values): {val}"
                 
             # Check for Yes/No
             elif val.lower() in ["yes", "no", "true", "false"]:
@@ -753,7 +753,7 @@ Instructions:
 2. Use ONLY the variables listed above.
 3. Respect the defined ranges and categories.
    - For Numeric Range: Use valid numbers within or near the range.
-   - For Categories: Use only the listed values (e.g., var == 'Value').
+   - For Strict Categories: YOU MUST USE ONLY THE EXACT VALUES LISTED (e.g., if Allowed Values: 'A | B', then var == 'A' is valid, var == 'C' is INVALID).
    - For Boolean: Use True/False or 'Yes'/'No' as defined.
 4. Logic should make sense for moving between the states.
 5. If no condition is needed (always true), use "True".
