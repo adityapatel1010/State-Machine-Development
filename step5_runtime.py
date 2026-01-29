@@ -43,7 +43,11 @@ class StateManager:
         state_def = self.states[self.current_state]
         print(f"State: {self.current_state}")
         print(f"  Description: {state_def['description']}")
-        print(f"  Actions executing: {', '.join(state_def['actions'])}")
+        actions = state_def.get('actions', [])
+        if actions:
+            print(f"  Actions executing: {', '.join(actions)}")
+        else:
+            print("  Actions executing: (None defined)")
 
     def run_simulation(self):
         print("Starting State Machine Runtime...")

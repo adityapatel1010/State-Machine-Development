@@ -271,7 +271,7 @@ Output a concise summary list. If nothing relevant, say "None".
 <end_of_turn>
 <start_of_turn>model
 """
-    return generate_text(model, tokenizer, prompt, max_new_tokens=200)
+    return generate_text(model, tokenizer, prompt, max_new_tokens=300)
 
 def generate_canonical_context(mission_context, aggregated_info, model, tokenizer):
     """Generate canonical context identifying key variables and states"""
@@ -685,46 +685,76 @@ def condition_generator(overlay, model, tokenizer):
     # 3. Refine Transitions - Modify in place to preserve all other fields
     transitions = overlay.get("transitions", [])
     
+    # 3. Refine Transitions - Batch Processing
+    transitions = overlay.get("transitions", [])
+    if not transitions:
+        return overlay
+        
+    print(f"Refining {len(transitions)} transitions in batch...")
+    
+    # Prepare transition list for prompt
+    trans_list_str = ""
     for i, t in enumerate(transitions):
-        from_state = t.get("from")
-        to_state = t.get("to")
-        # We only want to generate a condition if one doesn't exist or we want to overwrite it.
-        # The prompt asks to "create conditions", implying we add/overwrite.
+        trans_list_str += f"{i}. {t.get('from')} -> {t.get('to')}\n"
         
-        print(f"Refining transition {i+1}/{len(transitions)}: {from_state} -> {to_state}")
-        
-        prompt = f"""<start_of_turn>user
-Task: Create conditions for this state transition based on the available parameters.
-
-Transition: {from_state} -> {to_state}
+    prompt = f"""<start_of_turn>user
+Task: Create boolean conditions for the following state transitions based on the available parameters.
 
 Available Variables:
 {json.dumps(valid_params, indent=2)}
 
-Instructions:
-1. Write a SINGLE line python-style boolean condition
-2. Use ONLY the variables listed above.
-3. Logic should make sense for moving from '{from_state}' to '{to_state}'.
-4. Output ONLY the condition string. No explanations.
-5. If no condition is needed (always true), output "True".
+Transitions:
+{trans_list_str}
 
-Condition:
+Instructions:
+1. Output a JSON object where keys are the transition indices (0 to {len(transitions)-1}) and values are the python-style boolean conditions (string).
+2. Use ONLY the variables listed above.
+3. Logic should make sense for moving between the states.
+4. If no condition is needed (always true), use "True".
+5. Output ONLY the valid JSON object.
+
+Example Format:
+{{
+  "0": "temp > 50",
+  "1": "pressure < 10",
+  "2": "True"
+}}
 <end_of_turn>
 <start_of_turn>model
-"""
-        # Generate condition
-        new_cond = generate_text(model, tokenizer, prompt, max_new_tokens=100).strip()
+{{"""
+    
+    # Generate batch conditions
+    # Increase token limit for batch response to avoid truncation
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=2048).strip()
+    
+    # Add opening brace if missing
+    if not response.strip().startswith('{'):
+        response = '{' + response
         
-        # Cleanup
-        new_cond = new_cond.strip('"`')
-        # Remove markdown code blocks if any
-        new_cond = new_cond.replace('```python', '').replace('```', '').strip()
-        
-        # print(f"  -> Generated: {new_cond}")
-        t["condition"] = new_cond
-        
-    # The 'transitions' list contains references to dicts inside 'overlay', so overlay is updated.
+    # Parse response
+    valid_conditions = extract_json_from_response(response)
+    
+    if valid_conditions:
+        print(f"✓ Retrieved {len(valid_conditions)} conditions")
+        for i, t in enumerate(transitions):
+            # Try string index first, then integer if needed
+            cond = valid_conditions.get(str(i)) or valid_conditions.get(i)
+            
+            if cond:
+                # Cleanup condition string
+                cond = str(cond).strip('"`').replace('```python', '').replace('```', '').strip()
+                t["condition"] = cond
+                print(f"  [{i}] {t.get('from')} -> {t.get('to')} : {cond}")
+            else:
+                print(f"  [{i}] No condition generated, defaulting to True")
+                t["condition"] = "True"
+    else:
+        print("✗ Failed to parse batch conditions, defaulting all to True")
+        for t in transitions:
+            t["condition"] = "True"
+
     return overlay
+        
 
 def main():
     """Main execution function"""
