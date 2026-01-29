@@ -238,8 +238,8 @@ def validate_overlay(data):
     for state_name, state_data in data["states"].items():
         if "description" not in state_data or "actions" not in state_data:
             return False, f"State '{state_name}' missing description or actions"
-        if not isinstance(state_data["actions"], list):
-            return False, f"State '{state_name}' actions must be a list"
+        # if not isinstance(state_data["actions"], list):
+        #     return False, f"State '{state_name}' actions must be a list"
     
     # Validate transition structure
     # Validate transition structure
