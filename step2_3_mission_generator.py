@@ -740,7 +740,7 @@ def condition_generator(overlay, model, tokenizer):
         trans_list_str += f"{i}. {t.get('from')} -> {t.get('to')}\n"
         
     prompt = f"""<start_of_turn>user
-Task: Create boolean conditions for the following state transitions based on the available parameters.
+Task: Create conditions for the following state transitions based on the available parameters and understand the descriptions of the states to create conditions for each transition.
 
 Context (State Descriptions):
 {json.dumps(overlay.get("states", {}), indent=2)}
@@ -758,19 +758,15 @@ Instructions:
    - For Numeric Range: Use valid numbers within or near the range.
    - For Strict Categories: YOU MUST USE ONLY THE EXACT VALUES LISTED (e.g., if Allowed Values: 'A | B', then var == 'A' is valid, var == 'C' is INVALID).
    - For Boolean: Use True/False or 'Yes'/'No' as defined.
-   - For Strict Categories: YOU MUST USE ONLY THE EXACT VALUES LISTED (e.g., if Allowed Values: 'A | B', then var == 'A' is valid, var == 'C' is INVALID).
-   - For Boolean: Use True/False or 'Yes'/'No' as defined.
 4. Logic MUST be derived from the Source and Target state descriptions.
    - Example: If target is "HighPressure", condition should involve "pressure > X".
-5. Use COMBINATIONS of variables where appropriate (e.g., "temp > 50 and pressure > 10").
-6. If no condition is needed (always true), use "True".
+5. Use COMBINATIONS of variables where appropriate.
 6. Output ONLY the valid JSON object.
 
 Example Format:
 {{
-  "0": "CollisionRisk > 80",
-  "1": "ZoneType == 'Hazard'",
-  "2": "True"
+  "0": "variable_name > n and variable_name == 'value'",
+  "1": "variable_name == 'value'"
 }}
 <end_of_turn>
 <start_of_turn>model
