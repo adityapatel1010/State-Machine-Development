@@ -384,12 +384,9 @@ Output ONLY valid JSON with EXACT structure:
     "Alert": {{"description": "..."}},
     "Inform": {{"description": "..."}}
     // plus exactly 6 custom states
-  }}
+  }},
   "transitions": [
-    {{
-      "from": ,
-      "to": 
-    }}
+    {{"from": "...", "to": "..."}}
   ]
 }}
 
