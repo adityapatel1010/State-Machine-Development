@@ -385,6 +385,12 @@ Output ONLY valid JSON with EXACT structure:
     "Inform": {{"description": "..."}}
     // plus exactly 6 custom states
   }}
+  "transitions": [
+    {{
+      "from": ,
+      "to": 
+    }}
+  ]
 }}
 
 FINAL SILENT VALIDATION (do not output)
