@@ -683,6 +683,10 @@ def condition_generator(overlay, model, tokenizer):
             key = key.strip()
             val = val.strip().strip(";")
             
+            # Skip parameters that require descriptions (unsuitable for boolean logic)
+            if "description" in val.lower() or "describe" in val.lower():
+                continue
+            
             # Heuristic to identify usable parameters
             # 1. Numeric with range (e.g., 0-100)
             # 2. Enums (e.g., A | B | C)
@@ -740,7 +744,7 @@ def condition_generator(overlay, model, tokenizer):
         trans_list_str += f"{i}. {t.get('from')} -> {t.get('to')}\n"
         
     prompt = f"""<start_of_turn>user
-Task: Create conditions for the following state transitions based on the available parameters and understand the descriptions of the states to create conditions for each transition.
+Task: You are a surveillance system that monitors the state of a system and creates conditions for the following state transitions based on the available parameters and understand the descriptions of the states to create conditions for each transition. Some transitions may occur due to factors not described in the state descriptions. In such cases, use your understanding of the system to create appropriate conditions to trigger the transitions for cases like fire hazard.
 
 Context (State Descriptions):
 {json.dumps(overlay.get("states", {}), indent=2)}
