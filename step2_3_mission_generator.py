@@ -380,15 +380,12 @@ Output ONLY valid JSON with EXACT structure:
   "mission_id": "{canonical_context.get('mission_id','')}",
   "initial_state": "Normal",
   "states": {{
-    "Normal": {{"description": "...", "actions": ["...", "...", "..."]}},
-    "Escalation": {{"description": "...", "actions": ["...", "...", "..."]}},
-    "Alert": {{"description": "...", "actions": ["...", "...", "..."]}},
-    "Inform": {{"description": "...", "actions": ["...", "...", "..."]}}
+    "Normal": {{"description": "..."}},
+    "Escalation": {{"description": "..."}},
+    "Alert": {{"description": "..."}},
+    "Inform": {{"description": "..."}}
     // plus exactly 6 custom states
-  }},
-  "transitions": [
-    {{"from": "...", "to": "..."}}
-  ]
+  }}
 }}
 
 FINAL SILENT VALIDATION (do not output)
@@ -697,7 +694,7 @@ def condition_generator(overlay, model, tokenizer):
         print(f"Refining transition {i+1}/{len(transitions)}: {from_state} -> {to_state}")
         
         prompt = f"""<start_of_turn>user
-Task: Create a boolean condition for this state transition based on the available parameters.
+Task: Create conditions for state transition based on the available parameters.
 
 Transition: {from_state} -> {to_state}
 
