@@ -1,10 +1,3 @@
-OUTPUT (flat line, no markdown):
-Summary=2 concise sentences: 1) overall scene; 2) micro-details/transients including hazard object if any;
-POI_Summary=[{id: P-POI or Group,
-  summary: ≤20 words describing ONLY the distinguishing action,
-  posture, or micro-behavior that makes this POI relevant,
-  with minimal visible attributes strictly necessary to identify them.}];
-Chain=cause→effect or stability ≤35 words;
 Category=SafetyViolation | NearMiss | Accident | QualityDefect | ProcessDeviation | FlowDisruption | MaterialIssue | MaintenanceIssue | Contamination | FireHazard | Accident | Traffic | GroupBehavior | Loitering | Normal;
 IncidentType=1|2|3|4|5;
 ZoneType=Safe |Hazard | Unknown;

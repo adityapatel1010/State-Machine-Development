@@ -661,23 +661,65 @@ def condition_generator(overlay, model, tokenizer):
     """Refine transition conditions using sample parameters"""
     print("\nStarting Condition Generator...")
     
-    # 1. Load Parameters
-    try:
-        with open('sample_output.json', 'r') as f:
-            data = json.load(f)
-            params = data.get("parameters", {})
-    except FileNotFoundError:
-        print("sample_output.json not found, skipping condition refinement.")
+    # 1. Load Parameters from VLM Input
+    input_file = 'input_from_vlm.txt'
+    if not os.path.exists(input_file):
+        print(f"{input_file} not found, skipping condition refinement.")
         return overlay
 
-    # 2. Filter Numeric/Boolean
     valid_params = {}
-    for k, v in params.items():
-        if isinstance(v, (int, float, bool)) or (isinstance(v, str) and v.lower() in ['true', 'false']):
-            valid_params[k] = v
+    print(f"Parsing parameters from {input_file}...")
+    
+    try:
+        with open(input_file, 'r') as f:
+            lines = f.readlines()
+            
+        for line in lines:
+            line = line.strip()
+            if not line or "=" not in line:
+                continue
+                
+            key, val = line.split("=", 1)
+            key = key.strip()
+            val = val.strip().strip(";")
+            
+            # Heuristic to identify usable parameters
+            # 1. Numeric with range (e.g., 0-100)
+            # 2. Enums (e.g., A | B | C)
+            # 3. Boolean/Binary (Yes/No, True/False)
+            
+            is_usable = False
+            metadata = ""
+            
+            # Check for range "0-100"
+            if "-" in val and len(val.split("-")) == 2 and val.replace("-","").replace(".","").isdigit():
+                 is_usable = True
+                 metadata = f"Numeric Range: {val}"
+                 
+            # Check for Enums "|"
+            elif "|" in val:
+                is_usable = True
+                metadata = f"Categories: {val}"
+                
+            # Check for Yes/No
+            elif val.lower() in ["yes", "no", "true", "false"]:
+                is_usable = True
+                metadata = f"Boolean: {val}"
+                
+            # Check explicit list [...]
+            elif val.startswith("[") and val.endswith("]"):
+                 # Skip complex lists for now unless they look like discrete states
+                 pass
+            
+            if is_usable:
+                valid_params[key] = metadata
+
+    except Exception as e:
+        print(f"Error parsing {input_file}: {e}")
+        return overlay
             
     if not valid_params:
-        print("No valid numeric/boolean parameters found.")
+        print("No valid parameters found in VLM input.")
         return overlay
 
     print(f"Using parameters for conditions: {list(valid_params.keys())}")
@@ -700,7 +742,7 @@ def condition_generator(overlay, model, tokenizer):
     prompt = f"""<start_of_turn>user
 Task: Create boolean conditions for the following state transitions based on the available parameters.
 
-Available Variables:
+Available Variables (with types/ranges):
 {json.dumps(valid_params, indent=2)}
 
 Transitions:
@@ -709,14 +751,18 @@ Transitions:
 Instructions:
 1. Output a JSON object where keys are the transition indices (0 to {len(transitions)-1}) and values are the python-style boolean conditions (string).
 2. Use ONLY the variables listed above.
-3. Logic should make sense for moving between the states.
-4. If no condition is needed (always true), use "True".
-5. Output ONLY the valid JSON object.
+3. Respect the defined ranges and categories.
+   - For Numeric Range: Use valid numbers within or near the range.
+   - For Categories: Use only the listed values (e.g., var == 'Value').
+   - For Boolean: Use True/False or 'Yes'/'No' as defined.
+4. Logic should make sense for moving between the states.
+5. If no condition is needed (always true), use "True".
+6. Output ONLY the valid JSON object.
 
 Example Format:
 {{
-  "0": "temp > 50",
-  "1": "pressure < 10",
+  "0": "CollisionRisk > 80",
+  "1": "ZoneType == 'Hazard'",
   "2": "True"
 }}
 <end_of_turn>
@@ -725,7 +771,7 @@ Example Format:
     
     # Generate batch conditions
     # Increase token limit for batch response to avoid truncation
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=2048).strip()
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=4096).strip()
     
     # Add opening brace if missing
     if not response.strip().startswith('{'):
