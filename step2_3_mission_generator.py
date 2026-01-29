@@ -363,15 +363,11 @@ HARD REQUIREMENTS
      (b) return to Normal if cleared
    - Alert must only be entered from Escalation or from a confirmed severe hazard state (not directly from Normal unless mission context explicitly allows).
 
-EVIDENCE-GATED TRANSITIONS (MANDATORY)
+TRANSITIONS (MANDATORY)
 For each non-core custom state you create, you MUST define:
 - a "confirmed" exit transition (hazard confirmed/persists -> mitigation/escalation)
 - a "cleared" exit transition (evidence clears -> Normal or lower severity)
 These conditions must use ALLOWED VARIABLES only.
-
-ACTIONS
-Exactly 3 actions per state. Actions must be feasible and generic (no invented integrations).
-Use snake_case verb_object.
 
 OUTPUT FORMAT
 Output ONLY valid JSON with EXACT structure:
@@ -637,7 +633,7 @@ FINAL SILENT VALIDATION (do not output)
 # {{
 # """
     # Increase token limit for overlay generation
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=3072)
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=1024)
     
     # Add opening brace if not present
     if not response.strip().startswith('{'):
