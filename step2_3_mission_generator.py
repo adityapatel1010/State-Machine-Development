@@ -155,7 +155,7 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=1024):
     response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
     
     # Show response length info
-    print(f"Generated {len(generated_tokens)} tokens (~{len(response)} chars)")
+    # print(f"Generated {len(generated_tokens)} tokens (~{len(response)} chars)")
     if len(response) > 200:
         print(f"Preview: {response}")
     else:
@@ -235,9 +235,9 @@ def validate_overlay(data):
         return False, "transitions must be a list"
     
     # Validate state structure
-    # for state_name, state_data in data["states"].items():
-    #     if "description" not in state_data or "actions" not in state_data:
-    #         return False, f"State '{state_name}' missing description or actions"
+    for state_name, state_data in data["states"].items():
+        if "description" not in state_data:
+            return False, f"State '{state_name}' missing description"
         # if not isinstance(state_data["actions"], list):
         #     return False, f"State '{state_name}' actions must be a list"
     
@@ -271,7 +271,7 @@ Output a concise summary list. If nothing relevant, say "None".
 <end_of_turn>
 <start_of_turn>model
 """
-    return generate_text(model, tokenizer, prompt, max_new_tokens=1024)
+    return generate_text(model, tokenizer, prompt, max_new_tokens=200)
 
 def generate_canonical_context(mission_context, aggregated_info, model, tokenizer):
     """Generate canonical context identifying key variables and states"""
@@ -713,14 +713,14 @@ Condition:
 <start_of_turn>model
 """
         # Generate condition
-        new_cond = generate_text(model, tokenizer, prompt, max_new_tokens=64).strip()
+        new_cond = generate_text(model, tokenizer, prompt, max_new_tokens=100).strip()
         
         # Cleanup
         new_cond = new_cond.strip('"`')
         # Remove markdown code blocks if any
         new_cond = new_cond.replace('```python', '').replace('```', '').strip()
         
-        print(f"  -> Generated: {new_cond}")
+        # print(f"  -> Generated: {new_cond}")
         t["condition"] = new_cond
         
     # The 'transitions' list contains references to dicts inside 'overlay', so overlay is updated.
