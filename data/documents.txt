@@ -1,23 +1,29 @@
-# Industrial Safety Protocols: Hazardous Material Monitoring
-Compliance Standard: ISO-45001 / OSHA 1910.119 (Process Safety Management)
+# STANDARD OPERATING PROCEDURE: COLLISION AVOIDANCE (SOP-CA-2024)
 
-# 1. Operational Thresholds
-- **Temperature**: Maintain containment vessel between 15°C and 45°C.
-  - *Warning limit*: >50°C.
-  - *Critical limit*: >65°C requires immediate cooling flush.
-- **Pressure**: Normal operating range 10-15 bar.
-  - *Trip limit*: >18 bar triggers automatic relief valve.
+## 1. Safety Zones
+- **Green Zone (Safe)**: Walkways marked with yellow tape. Pedestrians have absolute priority. Forklifts prohibited unless stationary.
+- **Red Zone (Hazard)**: Active loading bays and forklift main thoroughfares. Pedestrians must strictly follow crossing signals.
+- **Shared Zone (Caution)**: Areas where paths cross. Max speed 5 km/h for all equipment.
 
-# 2. Anomaly Detection Guidelines
-- **Leak Detection**: Chemical sensors must poll every 500ms. 
-  - Trace levels (>5ppm) initiate 'Investigation' state.
-  - High levels (>50ppm) initiate 'Emergency Evacuation'.
-- **Vibration Analysis**: Continuous monitoring of pump bearings.
-  - Sudden spike (>3g) indicates potential mechanical failure.
+## 2. Forklift Operations
+- **Speed Limits**: 
+  - Main Aisles: 10 km/h
+  - Crossing/Shared Zones: 5 km/h
+  - Near Pedestrians (< 5m): 3 km/h (Crawl Speed)
+- **Right of Way**: Pedestrians always have right of way. Forklifts must yield immediately upon visual contact.
+- **Load Stability**: Loads must not obstructing view. Unstable loads require a spotter.
 
-# 3. Emergency Response
-- In case of "Confirmed Leak":
-  - Activate containment doors.
-  - Trigger site-wide alarm.
-  - Notify Hazardous Response Team (HazMat).
-- **Power Loss Protocol**: Switch to UPS, gracefully shut down non-critical feeds, maintain sensor grid.
+## 3. Proximity Protocols
+- **Zone A (Warning)**: Object/Person detected within 5 meters. Driver receives visual alert. Slow down to 5 km/h.
+- **Zone B (Critical)**: Object/Person detected within 2 meters. Audible alarm triggers. Immediate stop required.
+- **Zone C (Impact Imminent)**: < 1 meter or projected path collision < 2 seconds. Emergency Braking System (EBS) engagement authorized.
+
+## 4. Pedestrian Rules
+- **PPE**: High-visibility vests (Class 2 or 3) are mandatory at all times.
+- **Distractions**: Use of mobile phones is strictly prohibited in Red and Shared zones.
+- **Crossings**: Make eye contact with driver before crossing active aisles.
+
+## 5. Incident Reporting
+- **Near Miss**: Any Zone B activation without collision must be logged as a Near Miss.
+- **Accident**: Any contact or Zone C activation requires immediate shift halt and investigation.
+- **Safety Violation**: Loitering in Red Zone or Speeding (>10% over limit) triggers a safety citation.
