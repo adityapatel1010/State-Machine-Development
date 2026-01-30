@@ -1,91 +1,234 @@
 import json
-import time
-import random
+import re
+import os
+from flask import Flask, request, jsonify
 
-def load_json(path):
-    with open(path, 'r') as f:
-        return json.load(f)
+# Configuration
+DSL_PATH = 'MissionSpecDSL.json'
+DEFAULT_STATE = 'Normal'
+
+app = Flask(__name__)
 
 class StateManager:
-    def __init__(self, mission_spec):
-        self.spec = mission_spec["spec"]
-        self.current_state = self.spec["initial_state"]
-        self.states = self.spec["states"]
-        self.transitions = self.spec["transitions"]
-        self.running = True
-
-    def get_available_transitions(self):
-        return [t for t in self.transitions if t["from"] == self.current_state]
-
-    def process_event(self, event):
-        print(f"\n[Event Received]: {event}")
-        possible_transitions = self.get_available_transitions()
+    def __init__(self):
+        self.spec = self.load_spec()
+        self.current_state = self.spec["spec"]["initial_state"] if self.spec else DEFAULT_STATE
+        self.states = self.spec["spec"]["states"] if self.spec else {}
+        self.transitions = self.spec["spec"]["transitions"] if self.spec else []
+        self.history = []
         
-        for t in possible_transitions:
-            # Simple condition evaluator
-            # Condition format expected: "event == 'type'"
-            condition = t["condition"]
-            # Extract expected event from string "event == 'foo'"
-            if "event ==" in condition:
-                expected_event = condition.split("'")[1]
-                if event == expected_event:
-                    self.transition_to(t["to"])
-                    return
+    def load_spec(self):
+        if not os.path.exists(DSL_PATH):
+            print(f"Warning: {DSL_PATH} not found.")
+            return None
+        with open(DSL_PATH, 'r') as f:
+            return json.load(f)
 
-        print(f"No transition triggered for event '{event}' in state '{self.current_state}'.")
+    def reset(self):
+        self.current_state = self.spec["spec"]["initial_state"]
+        self.history = []
+        return self.current_state
 
-    def transition_to(self, new_state_name):
-        print(f"!!! Transitioning: {self.current_state} -> {new_state_name}")
-        self.current_state = new_state_name
-        self.execute_state_actions()
-
-    def execute_state_actions(self):
-        state_def = self.states[self.current_state]
-        print(f"State: {self.current_state}")
-        print(f"  Description: {state_def['description']}")
-        actions = state_def.get('actions', [])
-        if actions:
-            print(f"  Actions executing: {', '.join(actions)}")
-        else:
-            print("  Actions executing: (None defined)")
-
-    def run_simulation(self):
-        print("Starting State Machine Runtime...")
-        self.execute_state_actions()
+    def get_context_from_json(self, input_data):
+        """
+        Extract variables from nested JSON and string fields.
+        1. Flattens 'summary' dict.
+        2. Parses 'Key=Value' patterns from strings.
+        3. Converts types (int, float, bool).
+        """
+        context = {}
         
-        # Simulated sequence of events
-        events_sequence = [
-            "wait", 
-            "suspicious_movement_detected", # Should go to Investigate
-            "false_alarm",                  # Should go back to Patrol
-            "suspicious_movement_detected", # Investigate again
-            "unauthorized_person_confirmed",# Alert_Operator
-            "escalate_command_received"     # Lockdown
-        ]
+        # 1. Base Strategy: Look inside 'summary' if present, otherwise root
+        source = input_data.get('summary', input_data)
+        
+        # Helper to process a dict
+        def process_dict(d):
+            for k, v in d.items():
+                if isinstance(v, (str, int, float, bool)):
+                    # Add direct key
+                    context[k] = self.infer_type(v)
+                    
+                    # If string, check for embedded params like "Category=Normal"
+                    if isinstance(v, str):
+                        self.parse_embedded_params(v, context)
+                elif isinstance(v, dict):
+                    process_dict(v) # limited recursion
+                    
+        process_dict(source)
+        return context
 
-        for event in events_sequence:
-            time.sleep(1)
-            self.process_event(event)
-            if self.current_state == "Lockdown":
-                print("\n[Runtime] Lockdown initiated. Terminating simulation.")
-                break
+    def parse_embedded_params(self, text, context):
+        # Regex for Key=Value (simple)
+        # Matches: Word=Word or Word=Number
+        pattern = r'([a-zA-Z0-9_\-\/]+)\s*=\s*([^;\n]+)'
+        matches = re.finditer(pattern, text)
+        for m in matches:
+            k = m.group(1).strip()
+            v = m.group(2).strip()
+            context[k] = self.infer_type(v)
 
-def main():
-    print("Step 5: Initialization Runtime...")
+    def infer_type(self, val):
+        if isinstance(val, (int, float, bool)):
+            return val
+        
+        val_str = str(val).strip()
+        
+        # Boolean
+        if val_str.lower() == 'true' or val_str.lower() == 'yes':
+            return True
+        if val_str.lower() == 'false' or val_str.lower() == 'no':
+            return False
+            
+        # Numeric
+        try:
+            if '.' in val_str:
+                return float(val_str)
+            else:
+                return int(val_str)
+        except ValueError:
+            pass
+            
+        # Remove quotes if present
+        return val_str.strip('"\'')
+
+    def evaluate_transitions(self, context):
+        potential_transitions = [t for t in self.transitions if t["from"] == self.current_state]
+        triggered = None
+        
+        print(f"\nEvaluating transitions for State: {self.current_state}")
+        print(f"Context: {json.dumps(context, indent=2)}")
+        
+        for t in potential_transitions:
+            condition = t.get("condition", "True")
+            try:
+                # Safe context for eval
+                # We add 'context' keys as locals
+                # Note: This is a simulation sandbox. 
+                # Ideally, use a proper expression parser, but eval is requested implicitly by user constraints.
+                if condition == "True":
+                    triggered = t
+                    break
+                    
+                # Eval
+                result = eval(condition, {"__builtins__": {}}, context)
+                if result:
+                    print(f"  [MATCH] {t['from']} -> {t['to']} (Cond: {condition})")
+                    triggered = t
+                    break # Priority determined by list order (First match wins)
+                else:
+                    print(f"  [FALSE] {t['from']} -> {t['to']} (Cond: {condition})")
+            except Exception as e:
+                print(f"  [ERROR] Condition '{condition}' failed: {e}")
+                
+        if triggered:
+            self.transition_to(triggered["to"])
+            return True, triggered
+            
+        print("  No transition triggered.")
+        return False, None
+
+    def transition_to(self, new_state):
+        self.history.append({
+            "from": self.current_state,
+            "to": new_state,
+            "timestamp": "now" # In real app, use datetime
+        })
+        self.current_state = new_state
+
+# Global Manager Instance
+sm = StateManager()
+
+@app.route('/start', methods=['POST'])
+def start_simulation():
+    state = sm.reset()
+    return jsonify({
+        "message": "Simulation started/reset",
+        "current_state": state,
+        "description": sm.states.get(state, {}).get("description", "")
+    })
+
+@app.route('/update', methods=['POST'])
+def update_state():
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+        
+    data = request.get_json()
     
-    # 1. Load MissionSpecDSL.json
-    try:
-        dsl = load_json('MissionSpecDSL.json')
-        print("Loaded MissionSpecDSL.json")
-    except FileNotFoundError:
-        print("Error: MissionSpecDSL.json not found. Run Step 4 first.")
-        return
-
-    # 2. Initialize State Manager
-    sm = StateManager(dsl)
+    # 1. Extract context
+    context = sm.get_context_from_json(data)
     
-    # 3. Run Simulation
-    sm.run_simulation()
+    # 2. Evaluate State
+    transitioned, transition_data = sm.evaluate_transitions(context)
+    
+    response = {
+        "current_state": sm.current_state,
+        "description": sm.states.get(sm.current_state, {}).get("description", ""),
+        "transitioned": transitioned,
+        "context_extracted": context
+    }
+    
+    if transitioned:
+        response["transition_details"] = {
+            "from": transition_data["from"],
+            "to": transition_data["to"],
+            "condition": transition_data["condition"]
+        }
+    
+    return jsonify(response)
 
-if __name__ == "__main__":
-    main()
+@app.route('/status', methods=['GET'])
+def get_status():
+    return jsonify({
+        "current_state": sm.current_state,
+        "history_length": len(sm.history)
+    })
+
+if __name__ == '__main__':
+    import argparse
+    import sys
+    
+    # parser = argparse.ArgumentParser(description=f"State Machine Runtime (API or CLI)")
+    # parser.add_argument('--input', type=str, help='Path to VLM JSON file to process (single shot). If omitted, starts Flask API.')
+    # args = parser.parse_args()
+
+    file_name="./sample_vlm.json"
+    
+    if file_name:
+        # CLI Mode
+        if not os.path.exists(file_name):
+            print(f"Error: Input file {file_name} not found.")
+            sys.exit(1)
+            
+        print(f"Running in CLI Mode with input: {file_name}")
+        try:
+            with open(file_name, 'r') as f:
+                data = json.load(f)
+                
+            # Reuse logic
+            context = sm.get_context_from_json(data)
+            transitioned, transition_data = sm.evaluate_transitions(context)
+            
+            result = {
+                "initial_state": sm.states.get("initial_state", DEFAULT_STATE), # Note: sm.current_state gets updated
+                "final_state": sm.current_state,
+                "transition_occurred": transitioned,
+            }
+            if transitioned:
+                result["transition"] = {
+                    "from": transition_data["from"],
+                    "to": transition_data["to"],
+                    "condition": transition_data["condition"]
+                }
+            
+            print(json.dumps(result, indent=2))
+            
+        except json.JSONDecodeError:
+            print("Error: Invalid JSON in input file.")
+        except Exception as e:
+            print(f"Error processing file: {e}")
+            
+    else:
+        # API Mode
+        print(f"State Machine Runtime API running on http://0.0.0.0:5000")
+        print(f"Initial State: {sm.current_state}")
+        app.run(host='0.0.0.0', port=5000, debug=True)
