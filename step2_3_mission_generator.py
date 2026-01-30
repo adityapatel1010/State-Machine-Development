@@ -143,11 +143,9 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=1024):
     outputs = model.generate(
         **inputs, 
         max_new_tokens=max_new_tokens,
-        temperature=0.1,  # Slight temperature for better diversity
-        do_sample=True,
+        do_sample=False,  # Greedy decoding for deterministic output
         pad_token_id=tokenizer.eos_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-        top_p=0.9
+        eos_token_id=tokenizer.eos_token_id
     )
     
     # Decode only the NEW tokens
@@ -684,7 +682,7 @@ def condition_generator(overlay, model, tokenizer):
             val = val.strip().strip(";")
             
             # Skip parameters that require descriptions (unsuitable for boolean logic)
-            if "description" in val.lower() or "describe" in val.lower():
+            if "description" in val.lower() or "describe" in val.lower() or "[" in val or "]" in val or "..." in val:
                 continue
             
             # Heuristic to identify usable parameters
