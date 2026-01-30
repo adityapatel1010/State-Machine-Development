@@ -357,9 +357,9 @@ MISSION CONTEXT:
 {json.dumps(canonical_context, indent=2)}
 
 HARD REQUIREMENTS
-1) EXACTLY 10 states total.
+1) EXACTLY 8 states total.
 2) Must include core states exactly: Normal, Escalation, Alert, Inform.
-3) The remaining 6 states MUST be sensor/VLM-evidence-driven operational modes implied by mission context.
+3) The remaining 4 states MUST be sensor/VLM-evidence-driven operational modes implied by mission context.
 6) Every state must be reachable from Normal (possibly via other states).
 7) No dead states: each state must have at least one inbound and one outbound transition (except Alert may be terminal ONLY if mission context says so).
 8) Protocol logic required:
@@ -370,7 +370,6 @@ HARD REQUIREMENTS
 
 TRANSITIONS (MANDATORY ORDER)
 1. Define transitions LINEARLY from Low Priority/Severity to High Priority/Severity.
-   - Start with Normal -> Low Level (Warning) -> Med Level -> Critical.
 2. For each non-core custom state you create, you MUST define:
    - a "confirmed" exit transition (hazard confirmed/persists -> mitigation/escalation)
    - a "cleared" exit transition (evidence clears -> Normal or lower severity)
@@ -387,7 +386,7 @@ Output ONLY valid JSON with EXACT structure:
     "Escalation": {{"description": "..."}},
     "Alert": {{"description": "..."}},
     "Inform": {{"description": "..."}}
-    // plus exactly 6 custom states
+    // plus exactly 4 custom states
   }},
   "transitions": [
     {{"from": "...", "to": "..."}}
