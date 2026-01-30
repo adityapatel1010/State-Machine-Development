@@ -363,7 +363,7 @@ HARD REQUIREMENTS
 4) No dead states: each state must have at least one inbound and one outbound transition.
 
 TRANSITIONS (MANDATORY ORDER)
-1. Define transitions LINEARLY from Low Priority/Severity to High Priority/Severity.
+1. Define transitions LINEARLY from Low Priority to High Priority.
 2. For each state you MUST define:
    - a transition to high priority state (except Alert)
 3. Do NOT define conditions for transitions.
