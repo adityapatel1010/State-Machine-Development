@@ -359,20 +359,14 @@ MISSION CONTEXT:
 HARD REQUIREMENTS
 1) EXACTLY 8 states total.
 2) Must include core states exactly: Normal, Escalation, Alert, Inform.
-3) The remaining 4 states MUST be sensor/VLM-evidence-driven operational modes implied by mission context.
-6) Every state must be reachable from Normal (possibly via other states).
-7) No dead states: each state must have at least one inbound and one outbound transition (except Alert may be terminal ONLY if mission context says so).
-8) Protocol logic required:
-   - Any "Assessment" type state MUST branch to:
-     (a) mitigation or escalation if hazard confirmed/persistent
-     (b) return to Normal if cleared
-   - Alert must only be entered from Escalation or from a confirmed severe hazard state (not directly from Normal unless mission context explicitly allows).
+3) The remaining 4 states MUST be generated based on the mission context.
+4) No dead states: each state must have at least one inbound and one outbound transition.
 
 TRANSITIONS (MANDATORY ORDER)
 1. Define transitions LINEARLY from Low Priority/Severity to High Priority/Severity.
 2. For each non-core custom state you create, you MUST define:
-   - a "confirmed" exit transition (hazard confirmed/persists -> mitigation/escalation)
-   - a "cleared" exit transition (evidence clears -> Normal or lower severity)
+   - a transition to high priority state (except Alert)
+   - a transition to low priority state (except Normal)
 3. Do NOT define conditions for transitions.
 
 OUTPUT FORMAT
@@ -394,9 +388,9 @@ Output ONLY valid JSON with EXACT structure:
 }}
 
 FINAL SILENT VALIDATION (do not output)
-- 10 states exactly
+- 8 states exactly
 - all states reachable
-- assessment states have confirmed + cleared exits
+- assessment states have transition to high and low priority state
 - Alert only via Escalation or confirmed severe hazard state
 <end_of_turn>
 <start_of_turn>model
@@ -768,12 +762,13 @@ Instructions:
 4. Logic MUST be derived from the Source and Target state descriptions.
    - Example: If target is "HighPressure", condition should involve "pressure > X".
 5. Use COMBINATIONS of ALL variables present in the available list.
+   - Use 'and' and 'or' to combine variables.
 6. Output ONLY the valid JSON object.
 
 Example Format:
 {{
-  "0": "variable_name > n1 and variable_name == 'value1'",
-  "1": "variable_name > n2 and variable_name == 'value2'"
+  "0": "(variable_name_1 > n1 or variable_name_1 < n2) and variable_name_2 == 'value1' and variable_name_3 == 'value2'",
+  "1": "variable_name_1 > n2 and (variable_name_2 == 'value3' or variable_name_2 == 'value4') and variable_name_3 == 'value5'"
 }}
 <end_of_turn>
 <start_of_turn>model
