@@ -170,6 +170,10 @@ def extract_json_from_response(response_text):
         
         if start != -1 and end != 0:
             json_str = response_text[start:end]
+            # Fix trailing commas: ,} -> } and ,] -> ]
+            import re
+            json_str = re.sub(r',\s*}', '}', json_str)
+            json_str = re.sub(r',\s*]', ']', json_str)
             return json.loads(json_str)
         else:
             print("No JSON object found (missing braces).")
