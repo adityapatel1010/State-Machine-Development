@@ -368,11 +368,13 @@ HARD REQUIREMENTS
      (b) return to Normal if cleared
    - Alert must only be entered from Escalation or from a confirmed severe hazard state (not directly from Normal unless mission context explicitly allows).
 
-TRANSITIONS (MANDATORY)
-For each non-core custom state you create, you MUST define:
-- a "confirmed" exit transition (hazard confirmed/persists -> mitigation/escalation)
-- a "cleared" exit transition (evidence clears -> Normal or lower severity)
-Do NOT define conditions for transitions.
+TRANSITIONS (MANDATORY ORDER)
+1. Define transitions LINEARLY from Low Priority/Severity to High Priority/Severity.
+   - Start with Normal -> Low Level (Warning) -> Med Level -> Critical.
+2. For each non-core custom state you create, you MUST define:
+   - a "confirmed" exit transition (hazard confirmed/persists -> mitigation/escalation)
+   - a "cleared" exit transition (evidence clears -> Normal or lower severity)
+3. Do NOT define conditions for transitions.
 
 OUTPUT FORMAT
 Output ONLY valid JSON with EXACT structure:
@@ -766,13 +768,13 @@ Instructions:
    - For Boolean: Use True/False or 'Yes'/'No' as defined.
 4. Logic MUST be derived from the Source and Target state descriptions.
    - Example: If target is "HighPressure", condition should involve "pressure > X".
-5. Use COMBINATIONS of variables where appropriate.
+5. Use COMBINATIONS of ALL variables present in the available list.
 6. Output ONLY the valid JSON object.
 
 Example Format:
 {{
-  "0": "variable_name > n and variable_name == 'value'",
-  "1": "variable_name == 'value'"
+  "0": "variable_name > n1 and variable_name == 'value1'",
+  "1": "variable_name > n2 and variable_name == 'value2'"
 }}
 <end_of_turn>
 <start_of_turn>model
