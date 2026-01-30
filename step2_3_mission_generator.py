@@ -364,9 +364,8 @@ HARD REQUIREMENTS
 
 TRANSITIONS (MANDATORY ORDER)
 1. Define transitions LINEARLY from Low Priority/Severity to High Priority/Severity.
-2. For each non-core custom state you create, you MUST define:
+2. For each state you MUST define:
    - a transition to high priority state (except Alert)
-   - a transition to low priority state (except Normal)
 3. Do NOT define conditions for transitions.
 
 OUTPUT FORMAT
@@ -389,9 +388,8 @@ Output ONLY valid JSON with EXACT structure:
 
 FINAL SILENT VALIDATION (do not output)
 - 8 states exactly
-- all states reachable
-- assessment states have transition to high and low priority state
-- Alert only via Escalation or confirmed severe hazard state
+- All states must be REACHABLE
+- All states have transition to high priority state
 <end_of_turn>
 <start_of_turn>model
 {{"""
@@ -762,13 +760,14 @@ Instructions:
 4. Logic MUST be derived from the Source and Target state descriptions.
    - Example: If target is "HighPressure", condition should involve "pressure > X".
 5. Use COMBINATIONS of ALL variables present in the available list.
-   - Use 'and' and 'or' to combine variables.
-6. Output ONLY the valid JSON object.
+   - Use 'and' and 'or' to combine same and different variables.
+6. Each transition defined is from low priority to high priority.
+7. Output ONLY the valid JSON object.
 
 Example Format:
 {{
-  "0": "(variable_name_1 > n1 or variable_name_1 < n2) and variable_name_2 == 'value1' and variable_name_3 == 'value2'",
-  "1": "variable_name_1 > n2 and (variable_name_2 == 'value3' or variable_name_2 == 'value4') and variable_name_3 == 'value5'"
+  "0": "('variable_name_1' > n1 or 'variable_name_1' < n2) and 'variable_name_2' == 'value1' and 'variable_name_3' == 'value2'",
+  "1": "'variable_name_1' > n2 and ('variable_name_2' == 'value3' or 'variable_name_2' == 'value4') and 'variable_name_3' == 'value5'"
 }}
 <end_of_turn>
 <start_of_turn>model
