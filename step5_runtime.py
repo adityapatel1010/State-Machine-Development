@@ -16,6 +16,14 @@ class StateManager:
         self.states = self.spec["spec"]["states"] if self.spec else {}
         self.transitions = self.spec["spec"]["transitions"] if self.spec else []
         self.history = []
+        self.alert_remaining = 0
+        
+        # Priority map: index determines priority (Low -> High)
+        # Using list(self.states.keys()) relies on insertion order (Python 3.7+)
+        state_names = list(self.states.keys())
+        self.priority_map = {name: i for i, name in enumerate(state_names)}
+        self.current_tick = 0
+        self.last_state_entry_tick = 0
         
     def load_spec(self):
         if not os.path.exists(DSL_PATH):
@@ -91,7 +99,49 @@ class StateManager:
         # Remove quotes if present
         return val_str.strip('"\'')
 
+    def check_alert_override(self, context):
+        THRESHOLD = 85
+        
+        # Check if we are currently in a forced alert period
+        if self.alert_remaining > 0:
+            self.alert_remaining -= 1
+            if self.current_state != 'Alert':
+                 self.transition_to('Alert')
+                 return True, {"from": "Override", "to": "Alert", "condition": f"AlertOverride (Remaining: {self.alert_remaining})"}
+            return True, None # Stayed in Alert
+
+        # Check for trigger condition
+        triggered = False
+        for val in context.values():
+            if isinstance(val, (int, float)):
+                if val > THRESHOLD:
+                    triggered = True
+                    break
+        
+        if triggered:
+            self.alert_remaining = 60
+            if self.current_state != 'Alert':
+                self.transition_to('Alert')
+                return True, {"from": "Override", "to": "Alert", "condition": "AlertOverride (Triggered)"}
+            
+            # If already in Alert, we still activate the override counter
+            self.alert_remaining = 60
+            return True, None
+            
+        return False, None
+
     def evaluate_transitions(self, context):
+        self.current_tick += 1
+        
+        # Check override first
+        is_override, override_info = self.check_alert_override(context)
+        if is_override:
+            if override_info:
+                print(f"  [OVERRIDE] {override_info['from']} -> {override_info['to']} ({override_info['condition']})")
+                return True, override_info
+            print("  [OVERRIDE] Staying in Alert.")
+            return False, None
+
         potential_transitions = [t for t in self.transitions if t["from"] == self.current_state]
         triggered = None
         
@@ -121,6 +171,17 @@ class StateManager:
                 print(f"  [ERROR] Condition '{condition}' failed: {e}")
                 
         if triggered:
+            # Check for priority-based delay
+            current_prio = self.priority_map.get(self.current_state, 0)
+            target_prio = self.priority_map.get(triggered["to"], 0)
+            
+            if target_prio < current_prio:
+                # High -> Low transition
+                elapsed = self.current_tick - self.last_state_entry_tick
+                if elapsed < 30:
+                    print(f"  [BLOCKED] Priority drop {self.current_state}({current_prio}) -> {triggered['to']}({target_prio}) blocked. Time in state: {elapsed} ticks < 30 ticks")
+                    return False, None
+
             self.transition_to(triggered["to"])
             return True, triggered
             
@@ -134,6 +195,7 @@ class StateManager:
             "timestamp": "now" # In real app, use datetime
         })
         self.current_state = new_state
+        self.last_state_entry_tick = self.current_tick
 
 # Global Manager Instance
 sm = StateManager()
