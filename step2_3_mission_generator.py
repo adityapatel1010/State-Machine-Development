@@ -365,8 +365,9 @@ HARD REQUIREMENTS
 TRANSITIONS (MANDATORY ORDER)
 1. Define transitions LINEARLY from Low Priority to High Priority.
 2. For each state you MUST define:
-   - a transition to high priority state (except Alert)
-3. Do NOT define conditions for transitions.
+   - a transition to high priority state
+3. Alert state has highest priority
+4. Do NOT define conditions for transitions.
 
 OUTPUT FORMAT
 Output ONLY valid JSON with EXACT structure:
@@ -377,8 +378,8 @@ Output ONLY valid JSON with EXACT structure:
   "states": {{
     "Normal": {{"description": "..."}},
     "Escalation": {{"description": "..."}},
-    "Alert": {{"description": "..."}},
-    "Inform": {{"description": "..."}}
+    "Inform": {{"description": "..."}},
+    "Alert": {{"description": "..."}}
     // plus exactly 4 custom states
   }},
   "transitions": [

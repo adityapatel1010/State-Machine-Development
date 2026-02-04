@@ -1,6 +1,7 @@
 import json
 import re
 import os
+import glob
 from flask import Flask, request, jsonify
 
 # Configuration
@@ -146,7 +147,7 @@ class StateManager:
         triggered = None
         
         print(f"\nEvaluating transitions for State: {self.current_state}")
-        print(f"Context: {json.dumps(context, indent=2)}")
+        # print(f"Context: {json.dumps(context, indent=2)}")
         
         for t in potential_transitions:
             condition = t.get("condition", "True")
@@ -160,7 +161,21 @@ class StateManager:
                     break
                     
                 # Eval
-                result = eval(condition, {"__builtins__": {}}, context)
+                # Use a custom dict that returns None for missing keys to avoid NameError
+                class SafeContext(dict):
+                    def __missing__(self, key):
+                        return None
+                
+                safe_context = SafeContext(context)
+                
+                # Check if the condition works with the current context
+                try:
+                    result = eval(condition, {"__builtins__": {}}, safe_context)
+                except NameError:
+                    # Fallback if somehow SafeContext doesn't catch it (e.g. implicitly in some python versions/evals)
+                    # But __missing__ should work for direct lookups.
+                    result = False
+                    
                 if result:
                     print(f"  [MATCH] {t['from']} -> {t['to']} (Cond: {condition})")
                     triggered = t
@@ -249,48 +264,57 @@ if __name__ == '__main__':
     import argparse
     import sys
     
-    # parser = argparse.ArgumentParser(description=f"State Machine Runtime (API or CLI)")
-    # parser.add_argument('--input', type=str, help='Path to VLM JSON file to process (single shot). If omitted, starts Flask API.')
-    # args = parser.parse_args()
-
-    file_name="./sample_vlm.json"
+    import argparse
+    import sys
     
-    if file_name:
-        # CLI Mode
-        if not os.path.exists(file_name):
-            print(f"Error: Input file {file_name} not found.")
-            sys.exit(1)
-            
-        print(f"Running in CLI Mode with input: {file_name}")
-        try:
-            with open(file_name, 'r') as f:
-                data = json.load(f)
-                
-            # Reuse logic
-            context = sm.get_context_from_json(data)
-            transitioned, transition_data = sm.evaluate_transitions(context)
-            
-            result = {
-                "initial_state": sm.states.get("initial_state", DEFAULT_STATE), # Note: sm.current_state gets updated
-                "final_state": sm.current_state,
-                "transition_occurred": transitioned,
-            }
-            if transitioned:
-                result["transition"] = {
-                    "from": transition_data["from"],
-                    "to": transition_data["to"],
-                    "condition": transition_data["condition"]
-                }
-            
-            print(json.dumps(result, indent=2))
-            
-        except json.JSONDecodeError:
-            print("Error: Invalid JSON in input file.")
-        except Exception as e:
-            print(f"Error processing file: {e}")
-            
-    else:
+    import argparse
+    import sys
+    
+    # Check if we should run in API mode (optional flag)
+    parser = argparse.ArgumentParser(description=f"State Machine Runtime")
+    parser.add_argument('--api', action='store_true', help='Run as Flash API server')
+    args = parser.parse_args()
+
+    if args.api:
         # API Mode
         print(f"State Machine Runtime API running on http://0.0.0.0:5000")
         print(f"Initial State: {sm.current_state}")
         app.run(host='0.0.0.0', port=5000, debug=True)
+    else:
+        # Directory Batch Mode
+        BLOCKS_DIR = './Factory-4/blocks/*.json'
+        files = sorted(glob.glob(BLOCKS_DIR))
+        
+        if not files:
+            print(f"No JSON files found in {BLOCKS_DIR}")
+        else:
+            print(f"Found {len(files)} files in {BLOCKS_DIR}. Processing sequentially...")
+            
+            for i, file_name in enumerate(files):
+                print(f"\n--- Step {i+1}: Processing {file_name} ---")
+                try:
+                    with open(file_name, 'r') as f:
+                        data = json.load(f)
+                        
+                    context = sm.get_context_from_json(data)
+                    transitioned, transition_data = sm.evaluate_transitions(context)
+                    
+                    result = {
+                        "step": i + 1,
+                        "file": file_name,
+                        "current_state": sm.current_state,
+                        "transition_occurred": transitioned,
+                    }
+                    if transitioned:
+                        result["transition"] = {
+                            "from": transition_data["from"],
+                            "to": transition_data["to"],
+                            "condition": transition_data["condition"]
+                        }
+                    
+                    print(json.dumps(result, indent=2))
+                    
+                except json.JSONDecodeError:
+                    print(f"Error: Invalid JSON in {file_name}.")
+                except Exception as e:
+                    print(f"Error processing {file_name}: {e}")
