@@ -688,6 +688,15 @@ def condition_generator(overlay, model, tokenizer):
             # 2. Enums (e.g., A | B | C)
             # 3. Boolean/Binary (Yes/No, True/False)
             
+            # Sanitize key for Python eval compatibility
+            # Replace non-alphanumeric (except underscore) with underscore
+            # Remove leading/trailing underscores caused by this
+            raw_key = key
+            safe_key = "".join([c if c.isalnum() else "_" for c in raw_key]).strip("_")
+            # Collapse multiple underscores
+            while "__" in safe_key:
+                safe_key = safe_key.replace("__", "_")
+                
             is_usable = False
             metadata = ""
             
@@ -712,7 +721,7 @@ def condition_generator(overlay, model, tokenizer):
                  pass
             
             if is_usable:
-                valid_params[key] = metadata
+                valid_params[safe_key] = metadata  # Use SAFE key here
 
     except Exception as e:
         print(f"Error parsing {input_file}: {e}")

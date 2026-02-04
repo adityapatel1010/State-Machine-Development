@@ -54,8 +54,13 @@ class StateManager:
         def process_dict(d):
             for k, v in d.items():
                 if isinstance(v, (str, int, float, bool)):
+                    # Sanitize key first
+                    safe_k = "".join([c if c.isalnum() else "_" for c in k]).strip("_")
+                    while "__" in safe_k:
+                        safe_k = safe_k.replace("__", "_")
+                        
                     # Add direct key
-                    context[k] = self.infer_type(v)
+                    context[safe_k] = self.infer_type(v)
                     
                     # If string, check for embedded params like "Category=Normal"
                     if isinstance(v, str):
@@ -74,7 +79,13 @@ class StateManager:
         for m in matches:
             k = m.group(1).strip()
             v = m.group(2).strip()
-            context[k] = self.infer_type(v)
+            
+            # Sanitize key
+            safe_k = "".join([c if c.isalnum() else "_" for c in k]).strip("_")
+            while "__" in safe_k:
+                safe_k = safe_k.replace("__", "_")
+                
+            context[safe_k] = self.infer_type(v)
 
     def infer_type(self, val):
         if isinstance(val, (int, float, bool)):
