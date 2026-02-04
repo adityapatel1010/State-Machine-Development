@@ -768,11 +768,12 @@ Instructions:
    - For Strict Categories: YOU MUST USE ONLY THE EXACT VALUES LISTED (e.g., if Allowed Values: 'A | B', then var == 'A' is valid, var == 'C' is INVALID).
    - For Boolean: Use True/False or 'Yes'/'No' as defined.
 4. Logic MUST be derived from the Source and Target state descriptions.
-   - Example: If target is "HighPressure", condition should involve "pressure > X".
 5. Use COMBINATIONS of ALL variables present in the available list.
    - Use 'and' and 'or' to combine same and different variables.
-6. Each transition defined is from low priority to high priority.
-7. Output ONLY the valid JSON object.
+6. NEGATIVE CONSTRAINT: Do NOT use State Names as values for 'Category' or other variables.
+   - ONLY use values explicitly listed in "Available Variables".
+7. Each transition defined is from low priority to high priority.
+8. Output ONLY the valid JSON object.
 
 Example Format:
 {{
