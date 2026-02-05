@@ -218,17 +218,17 @@ CONSTRAINTS:
 
 OUTPUT FORMAT:
 Return ONLY valid JSON matching this schema exactly:
-{
+{{
   "states": [
-    {
+    {{
       "name": "",
       "detectability": "VLM_DETECTABLE | NON_VLM_DETECTABLE",
       "Meaning": "",
       "Strong cues": "",
       "UNK rule": ""
-    }
+    }}
   ]
-}
+}}
 
 Do not include explanations, markdown, or commentary outside the JSON.
 <end_of_turn>
