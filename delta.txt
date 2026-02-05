@@ -1,0 +1,144 @@
+PREVIOUS_SCENE_ATTRIBUTES: [PASTE THE ENTIRE FLAT-LINE OUTPUT FROM INFERENCE #(N-1) HERE]
+ATTENTION LOCK: First, scan all current frames for the single most anomalous/out-of-order/suspicious delta vs PREVIOUS_SCENE_ATTRIBUTES (person/object/interaction). MICRO-ANOMALY SWEEP (MANDATORY): also scan specifically for subtle suspicious interactions: hand-to-hand object transfer, passing small items (keys/cards/cash/phone/badge), concealed handoffs, reaching across tables, handoff + immediate separation, observer/spotter behavior. PRIORITY OVERRIDE: micro-transfers outrank macro motion/crowds for AnomalyFocus selection. ZOOM RULE: if any possible object transfer is detected, you MUST set AnomalyFocus to that transfer and use DEEP ANALYSIS (even if the broader scene looks normal). Select ONE primary anomaly and describe it in ≤12 words as AnomalyFocus=... . Then perform MODE SELECT and the rest of the update with all fields anchored to AnomalyFocus (ignore normal background unless it affects AnomalyFocus).
+MODE SELECT: If Normal (no threat/anomaly) → FAST MODE (Summary=Normal activity, no issues detected; Chain=Routine activity; Category=Normal; IncidentType=1; TransientLevel=0; Confidence=100%; Active=No; Status=Stable; Prediction=No risk; Note on uncertainties=None and STOP). If Abnormal → DEEP ANALYSIS (update all fields, maintaining continuity from PREVIOUS_SCENE_ATTRIBUTES). Analyze the current 6 frames ([BRIEFLY DESCRIBE THE ACTION OR VISUAL EVIDENCE IN THE CURRENT 6 FRAMES, e.g., "Person A is now running toward the restricted gate."]) to update the Category, Status, and Transient levels. Output the COMPLETE mandatory schema exactly as defined below, updating all fields to match the current visual evidence.
+
+CATEGORY DEFINITIONS (VISUAL-ONLY, NO HALLUCINATION)
+All categories below must be scored ONLY from what is visible in the 6 frames.
+If the cue is not clearly visible in frames → output UNK (not a guess).
+Use temporal cues across F1→F6
+ThreatPresence =
+Meaning: Likelihood that an actual threat source exists in the scene (hostile actor, active hazard, weapon, intrusion) that could cause harm soon.
+Strong cues: visible weapon/hazard, active assault, forced entry, aggressive pursuit, dangerous tool use near people, alarmed crowd reaction.
+UNK rule: if the potential threat source is not visible/identifiable due to distance, occlusion, blur, or camera angle.
+HostileIntentIndicators =
+Meaning: Likelihood that a person/group intends to harm, intimidate, seize, sabotage, or attack (not just move quickly).
+Strong cues: stalking/tailing, charging, ambush posture, cornering/blocking, targeting gestures, repeated advances after resistance, coordinated actor + spotter.
+UNK rule: if body language, targets, or interaction context cannot be observed clearly.
+WeaponsOrWeaponLikeObjects =
+Meaning: Likelihood that a weapon or weapon-like object is present and usable (including improvised weapons).
+Strong cues: gun/knife/club-like silhouettes, grip consistent with weapon use, drawing from waistband/bag, concealment + reveal, aiming posture, others recoiling.
+UNK rule: if the object is partially occluded or too small/blurred to distinguish from benign items.
+UnusualClusteringOrFormation =
+Meaning: Likelihood that grouping/spacing is coordinated or abnormal for the setting, suggesting control, encirclement, blocking, or staging.
+Strong cues: flanking/encirclement, line/wedge formation, synchronized movement, blocking exits/lanes, clustering around a target, unusually static “stand-and-watch” groups.
+UNK rule: if crowd density is too high to resolve individuals or track relative positioning.
+RouteDisturbanceOrRoadAnomaly =
+Meaning: Likelihood that normal flow along paths/lanes is disrupted by an event, obstacle, or abnormal movement pattern.
+Strong cues: wrong-way travel, abrupt congestion, sudden stop-and-go ripple, detours/avoidance, people/vehicles funneling around a new obstacle, panic dispersal.
+UNK rule: if the route/lanes are not visible or baseline flow cannot be inferred from the frames.
+PerimeterProbeOrBoundaryTest =
+Meaning: Likelihood someone is testing a boundary/restricted zone to find access (physical or procedural) without committing fully.
+Strong cues: repeated approach-and-withdraw, checking locks/handles, peeking around barriers, climbing/leaning over lines, timing guards/cameras, touching fence/gate seams.
+UNK rule: if boundaries/signage/access points are not visible or the subject is too far/occluded.
+TargetFixationOrSurveillanceBehavior =
+Meaning: Likelihood an actor is surveilling or fixating on a specific target, entry, asset, or person (pre-attack, theft, or stalking behavior).
+Strong cues: persistent staring/tracking, repeated look-backs, shadowing path, filming/zooming, pausing to watch, positioning for sightlines, timing target movements.
+UNK rule: if gaze direction, camera/phone usage, or line-of-sight cannot be determined.
+C2OrCommsIndicators (visual-only) =
+Meaning: Likelihood of coordinated communication/command-and-control visible through gestures or device behavior (not audio).
+Strong cues: hand signals, repeated phone checks timed with actions, earpiece/mic use, “spotter + actor” role split, relay behavior, synchronized start/stop.
+UNK rule: if hands/devices are not visible or too small/blurred to confirm.
+LogisticsFlowAnomaly =
+Meaning: Likelihood that movement/transfer of items or luggage is out-of-pattern and potentially illicit (swap, drop, theft, unauthorized pickup).
+Strong cues: hand-to-hand small item transfer (keys/cards/cash/badge), bag swap, quick concealment after transfer, unattended drop-off, pickup from hidden spot, transfer + immediate separation.
+UNK rule: if objects/hands are occluded or item identity/transfer path is not visible.
+EngineeringOrObstacleActivity =
+Meaning: Likelihood someone is altering infrastructure or placing/removing obstacles to enable intrusion, delay response, or create hazards.
+Strong cues: tampering with panels/doors/locks, placing barriers, blocking cameras/lines of sight, moving cones/bollards, disabling equipment, staging materials in lanes.
+UNK rule: if the manipulated object/infrastructure is not visible or intent cannot be distinguished from normal maintenance.
+IndirectFirePrepIndicators (visual-only) =
+Meaning: Likelihood of visible preparation for indirect fire (mortar/rocket/artillery) based on equipment posture and setup behaviors.
+Strong cues: tube/launcher-like equipment setup, loading motions, aiming elevation adjustments, concealment near firing position, spotter observing sky/impact area, rapid repositioning after setup.
+UNK rule: if scene context is not militarized or relevant equipment is not visually discernible.
+CounterUASIndicators (nets, launchers, tracking) =
+Meaning: Likelihood of visible anti-drone equipment or behavior indicating drone tracking/engagement.
+Strong cues: net gun/launcher shapes, directional antennas/trackers, tripod devices aimed skyward, multiple people pointing/tracking, coordinated scanning of airspace.
+UNK rule: if devices are too small/occluded or could be ordinary cameras/antennas without targeting cues.
+AirDefenseVisualIndicators (launchers, radars visually identifiable) =
+Meaning: Likelihood that air-defense systems are present/active based on visually identifiable radars, launchers, or tracking behaviors.
+Strong cues: radar arrays, missile-launcher vehicles, optical tracking turrets, crew operating consoles, security perimeter around system, setup/aiming orientation.
+UNK rule: if objects cannot be identified due to distance/occlusion or environment is not consistent with such assets.
+QRFMobilizationIndicators (vehicles staging/moving fast) =
+Meaning: Likelihood of rapid response force mobilization (urgent staging/departure/convergence) suggesting escalation.
+Strong cues: multiple vehicles staging with purposeful alignment, sudden convoy departure, high-speed convergence, personnel loading quickly, lights/sirens, coordinated directionality.
+UNK rule: if vehicle context is unclear (e.g., normal traffic) or staging area not visible.
+CivilianProximity =
+Meaning: Likelihood civilians/bystanders are within immediate harm radius of a threat/hazard (small standoff distance).
+Strong cues: civilians near weapons/altercations, crowd within vehicle path, bystanders clustered near fire/smoke, children/elderly near hazard, limited escape routes.
+UNK rule: if civilians cannot be separated from non-civilians or distance relationships aren’t visible.
+CollateralDamageRisk =
+Meaning: Likelihood that an incident would cause unintended harm to bystanders or infrastructure if it escalates.
+Strong cues: dense crowd near threat, fragile/critical infrastructure nearby, secondary hazard sources (fuel, machinery), confined spaces, ricochet/chain-reaction environment.
+UNK rule: if the environment around the incident isn’t visible enough to assess blast/fire/impact radius.
+FireSmokeExplosionIndicators =
+Meaning: Likelihood of active or imminent combustion/explosion based on visible fire/smoke/flash/pressure effects.
+Strong cues: smoke plume, visible flames, sparks/flash, debris burst, people recoiling, soot/heat shimmer, rapid smoke growth near ignition source.
+UNK rule: if haze/lighting effects could be non-fire (steam, glare) and no clear combustion cues are visible.
+ConcealmentOrObscurationUse =
+Meaning: Likelihood an actor is using occlusion or concealment to hide actions, objects, or identity.
+Strong cues: hiding hands behind body/objects, using bags/coats to mask transfer, moving behind pillars, face covering timing, deliberate camera avoidance, smoke/fog as cover.
+UNK rule: if the view is inherently occluded (crowd/angle) such that concealment cannot be attributed to intent.
+DeceptionDecoyIndicators (visual-only) =
+Meaning: Likelihood that behavior/objects are designed to mislead observers or distract from the true action.
+Strong cues: staged commotion drawing attention away, obvious “bait” object, coordinated feint + separate actor action, dummy equipment, unusual props inconsistent with setting.
+UNK rule: if baseline context is unknown and “odd” objects may be normal for the location.
+NightOpsOrLowVisAdvantage (if applicable) =
+Meaning: Likelihood low visibility conditions are being exploited to reduce detection and enable suspicious action.
+Strong cues: movement in shadows, operating unlit, staying in glare zones/backlight, timing actions with crowd/low-light moments, using fog/rain/night to mask approach.
+UNK rule: if lighting/visibility conditions cannot be determined from the frames.
+Maritime_AISMismatchOrDarkVessel (if maritime) =
+Meaning: Likelihood a vessel is operating without expected identification/visibility consistent with a “dark” or mismatched vessel.
+Strong cues: unlit vessel at night, no visible markings where expected, unusual loitering, rendezvous behavior without standard nav lights, inconsistent ship type vs activity.
+UNK rule: if it’s not a maritime scene or vessel identification cues are not visible.
+Maritime_BoardingOrRendezvousIndicators (if maritime) =
+Meaning: Likelihood of close-vessel rendezvous or boarding/transfer activity.
+Strong cues: parallel drift, close approach + matching speed, people moving between vessels, ladders/ropes, crane/transfer motions, cargo/person handoff.
+UNK rule: if vessel separation/relative motion is not visible or the scene is not maritime.
+FriendlyForceRisk (blue-on-blue / proximity hazards, if applicable) =
+Meaning: Likelihood friendly entities are in each other’s hazard/engagement zones, creating accidental harm risk.
+Strong cues: crossfire alignment, vehicles passing too close, overlapping fields of fire, confusion/misidentification posture, friendly clustering near explosives/heavy equipment.
+UNK rule: if friend/foe identity cannot be inferred or proximity relationships aren’t visible.
+SensorLimitationsRisk (risk of being wrong due to visibility) =
+Meaning: Likelihood the model’s assessment could be wrong because the camera cannot reliably show key evidence.
+Strong cues: heavy occlusion, motion blur, distance too far, low light/glare, partial body visible, cluttered crowd, compressed/low-res frames, obstructed hands/objects.
+UNK rule: if evidence needed for a claim is not directly visible; default to higher SensorLimitationsRisk when unsure.
+
+
+RISK SCORING:
+
+RiskVector metric scores are 0–100.
+
+0–20 = none/benign; 21–40 = weak signal; 41–60 = notable; 61–80 = high; 81–100 = critical.
+
+Each non-trivial score (>25) MUST include a one-line evidence note.
+
+OUTPUT FORMAT (flat line, no braces, no markdown): AnomalyFocus=...;
+Summary=brief 2-sentence description of event and how it unfolds; Chain=chronological escalation or cause→effect in ≤35 words; Category=...; Incident Type=...; ZoneType=...; Transient Level=...; Active=...; Status=...; P-POI=...; S-POI=...; O-POI=...; Entities=[...]; Objects=[...]; Prediction=...; PredictionCategory=...; Note on uncertainties= ...;
+RISK VECTOR (MANDATORY, 0–100)
+Provide exactly these metrics with scores:
+ThreatPresence=...;
+HostileIntentIndicators=...;
+WeaponsOrWeaponLikeObjects=...;
+UnusualClusteringOrFormation=...;
+RouteDisturbanceOrRoadAnomaly=...; 
+PerimeterProbeOrBoundaryTest=...;
+TargetFixationOrSurveillanceBehavior=...;
+C2OrCommsIndicators (visual-only)=...;
+LogisticsFlowAnomaly=...;
+EngineeringOrObstacleActivity=...;
+IndirectFirePrepIndicators (visual-only)=...;
+CounterUASIndicators (nets, launchers, tracking)=...;
+AirDefenseVisualIndicators (launchers, radars visually identifiable)=...;
+QRFMobilizationIndicators (vehicles staging/moving fast)=...;
+CivilianProximity=...;
+CollateralDamageRisk=...;
+FireSmokeExplosionIndicators=...;
+ConcealmentOrObscurationUse=...;
+DeceptionDecoyIndicators (visual-only)=...;
+NightOpsOrLowVisAdvantage (if applicable)=...;
+Maritime_AISMismatchOrDarkVessel (if maritime)=...; 
+Maritime_BoardingOrRendezvousIndicators (if maritime)=...;
+FriendlyForceRisk (blue-on-blue / proximity hazards, if applicable)=...;
+SensorLimitationsRisk (risk of being wrong due to visibility)=...;
+
+For each metric with score > 25, add: Evidence: <one line>.
