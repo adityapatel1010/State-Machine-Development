@@ -170,42 +170,72 @@ def generate_states_with_classification(mission_context, aggregated_info, model,
     """Generate states and classify them as VLM detectable or not"""
     print("Generating Mission States and Classifications...")
     
-    prompt = f"""<start_of_turn>user
-You are an expert Mission Planner and Computer Vision Engineer.
+    prompt = f"""
+<start_of_turn>user
+You are a Mission Planner with expertise in Computer Vision and Vision-Language Models (VLMs).
 
-MISSION CONTEXT:
+MISSION CONTEXT (Ground Truth):
 {json.dumps(mission_context, indent=2)}
 
 RELEVANT DOMAIN KNOWLEDGE:
 {aggregated_info}
 
-TASK:
-1. Identify minimum "States" that this mission/system can be in.
-2. For EACH state, determine if it is "VLM_DETECTABLE" (Visible) or "NON_VLM_DETECTABLE" (Internal/Latent).
+OBJECTIVE:
+Derive the **minimum sufficient set of system/mission states** required to describe this mission at a high level.
+- Do NOT enumerate implementation details.
+- Do NOT include redundant, overlapping, or trivially derived states.
+- Prefer **semantic states** over low-level signals.
 
-DEFINITIONS:
-- VLM_DETECTABLE: States that can be visually identified from a video feed (e.g., "Fire Detected", "Person Running", "Door Open", "Smoke Visible", "Object Removed").
-- NON_VLM_DETECTABLE: Internal system states, logical states, or invisible conditions (e.g., "System Booting", "Silent Mode", "Battery Low", "Network Error", "Waiting for Signal").
-- For each state, provide a "Meaning"(What does this state mean in the context of the mission?), "Strong cues"(What visual cues indicate this state?), and "UNK rule"(When should this state be considered unknown?).
+TASKS:
+1. Identify the **smallest complete set of mutually distinct states** the mission can be in.
+2. For EACH state, classify it as:
+   - VLM_DETECTABLE → Can be reliably inferred from visual evidence alone.
+   - NON_VLM_DETECTABLE → Requires internal signals, metadata, logic, or non-visual sensors.
+
+DETECTABILITY CRITERIA:
+- VLM_DETECTABLE:
+  - State is visually observable by a human reviewing video frames.
+  - Strong visual patterns or objects are present.
+- NON_VLM_DETECTABLE:
+  - State depends on internal logic, timing, intent, configuration, or invisible conditions.
+  - No consistent visual evidence exists.
+
+FOR EACH STATE, PROVIDE:
+- name: Short, precise, canonical state name.
+- detectability: "VLM_DETECTABLE" or "NON_VLM_DETECTABLE".
+- Meaning: What this state represents in mission terms.
+- Strong cues:
+  - If VLM_DETECTABLE: concrete visual indicators.
+  - If NON_VLM_DETECTABLE: write "None (not visually observable)".
+- UNK rule:
+  - Conditions under which the system should mark this state as UNKNOWN due to ambiguity, missing data, or conflicting cues.
+
+CONSTRAINTS:
+- Generate ONLY states that are strictly necessary.
+- Avoid hierarchical or sub-states.
+- Avoid speculative or rare edge-case states.
+- Use consistent terminology across states.
 
 OUTPUT FORMAT:
-Output ONLY valid JSON with this exact structure:
-{{
+Return ONLY valid JSON matching this schema exactly:
+{
   "states": [
-    {{
-        "name": "...",
-        "detectability": "VLM_DETECTABLE or NON_VLM_DETECTABLE",
-        "Meaning": "...",
-        "Strong cues": "...",
-        "UNK rule": "..."
-    }},
-    ...
+    {
+      "name": "",
+      "detectability": "VLM_DETECTABLE | NON_VLM_DETECTABLE",
+      "Meaning": "",
+      "Strong cues": "",
+      "UNK rule": ""
+    }
   ]
-}}
+}
+
+Do not include explanations, markdown, or commentary outside the JSON.
 <end_of_turn>
 <start_of_turn>model
 {{
 """
+
     response = generate_text(model, tokenizer, prompt, max_new_tokens=1024)
     
     # Add opening brace if not present
@@ -288,6 +318,12 @@ def main():
     aggregated_info = "\n\n".join(relevant_chunks) if relevant_chunks else "No external documents provided."
 
     # 4. Generate States
+    print("\n" + "="*30)
+    print(" INPUT CONTEXT")
+    print("="*30)
+    print(f"Mission Context:\n{json.dumps(mission_context, indent=2)}")
+    print(f"\nAggregated Info from Docs:\n{aggregated_info}")
+    
     result = generate_states_with_classification(mission_context, aggregated_info, model, tokenizer)
     
     if not result or "states" not in result:
