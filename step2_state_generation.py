@@ -172,7 +172,7 @@ def generate_states_with_classification(mission_context, aggregated_info, model,
     
     prompt = f"""
 <start_of_turn>user
-You are a Mission Planner with expertise in Computer Vision and Vision-Language Models (VLMs).
+You are a Mission Planner with expertise in Computer Vision and Vision-Language Models.
 
 MISSION CONTEXT (Ground Truth):
 {json.dumps(mission_context, indent=2)}
@@ -181,7 +181,7 @@ RELEVANT DOMAIN KNOWLEDGE:
 {aggregated_info}
 
 OBJECTIVE:
-Derive the **minimum sufficient set of system/mission states** required to describe this mission at a high level.
+Derive the **minimum sufficient set of mission states** required to describe this mission at a high level from Mission Context only.
 - Do NOT enumerate implementation details.
 - Do NOT include redundant, overlapping, or trivially derived states.
 - Prefer **semantic states** over low-level signals.
