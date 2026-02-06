@@ -205,16 +205,9 @@ FOR EACH STATE, PROVIDE:
 - detectability: "VLM_DETECTABLE" or "NON_VLM_DETECTABLE".
 - Meaning: What this state represents in mission terms.
 - Strong cues:
-  - If VLM_DETECTABLE: concrete visual indicators.
-  - If NON_VLM_DETECTABLE: write "None (not visually observable)".
+  - Concrete visual indicators.
 - UNK rule:
   - Conditions under which the system should mark this state as UNKNOWN due to ambiguity, missing data, or conflicting cues.
-
-CONSTRAINTS:
-- Generate ONLY states that are strictly necessary.
-- Avoid hierarchical or sub-states.
-- Avoid speculative or rare edge-case states.
-- Use consistent terminology across states.
 
 OUTPUT FORMAT:
 Return ONLY valid JSON matching this schema exactly:
