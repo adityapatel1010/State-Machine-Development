@@ -166,7 +166,7 @@ def extract_json_from_response(response_text):
 
 # --- Core Logic ---
 
-def generate_states_with_classification(mission_context, aggregated_info, model, tokenizer):
+def generate_states_with_classification(mission_context, model, tokenizer):
     """Generate states and classify them as VLM detectable or not"""
     print("Generating Mission States and Classifications...")
     
@@ -177,20 +177,19 @@ You are a Mission Planner with expertise in Computer Vision and Vision-Language 
 MISSION CONTEXT (Ground Truth):
 {json.dumps(mission_context, indent=2)}
 
-RELEVANT DOMAIN KNOWLEDGE:
-{aggregated_info}
-
 OBJECTIVE:
 Derive the **minimum sufficient set of mission states** required to describe this mission at a high level from Mission Context only.
 - Do NOT enumerate implementation details.
 - Do NOT include redundant, overlapping, or trivially derived states.
 - Prefer **semantic states** over low-level signals.
+- The mission phases should define the states
 
 TASKS:
 1. Identify the **smallest complete set of mutually distinct states** the mission can be in.
 2. For EACH state, classify it as:
    - VLM_DETECTABLE → Can be reliably inferred from visual evidence alone.
    - NON_VLM_DETECTABLE → Requires internal signals, metadata, logic, or non-visual sensors.
+   - Create conditions that need to be met to achieve the state by understading the mission phase, mission constraints and mission rules.
 
 DETECTABILITY CRITERIA:
 - VLM_DETECTABLE:
@@ -200,7 +199,9 @@ DETECTABILITY CRITERIA:
   - State depends on internal logic, timing, intent, configuration, or invisible conditions.
   - No consistent visual evidence exists.
 
-FOR EACH STATE, PROVIDE:
+FOR EACH STATE, PROVIDE CONDITIONS:
+- The positive conditions should be met from mission phase and mission rules.
+- The negative conditions should be met from mission contraints.
 - name: Short, precise, canonical state name.
 - detectability: "VLM_DETECTABLE" or "NON_VLM_DETECTABLE".
 - Meaning: What this state represents in mission terms.
@@ -214,11 +215,16 @@ Return ONLY valid JSON matching this schema exactly:
 {{
   "states": [
     {{
-      "name": "",
-      "detectability": "VLM_DETECTABLE | NON_VLM_DETECTABLE",
-      "Meaning": "",
-      "Strong cues": "",
-      "UNK rule": ""
+    "state_name":"",
+    "detectability":"VLM_DETECTABLE" or "NON_VLM_DETECTABLE",
+    "conditions":{{
+            {{
+                "name": "",
+                "Meaning": "",
+                "Strong cues": "",
+                "UNK rule": ""
+            }},
+        }}
     }}
   ]
 }}
@@ -298,26 +304,27 @@ def main():
     if not found_docs:
         print("⚠ No documents found in data/. Context will be limited to Mission Purpose.")
 
-    relevant_chunks = []
-    if all_chunks:
-        # Use mission summary or keys as query
-        query = mission_context.get("mission_summary", "") 
-        # Fallback if specific keys exist
-        if not query:
-             query = mission_context.get("implicit_understanding", "Mission Safety and Security")
+    # relevant_chunks = []
+    # if all_chunks:
+    #     # Use mission summary or keys as query
+    #     query = mission_context.get("mission_summary", "") 
+    #     # Fallback if specific keys exist
+    #     if not query:
+    #          query = mission_context.get("implicit_understanding", "Mission Safety and Security")
              
-        relevant_chunks = get_relevant_chunks(all_chunks, query)
+    #     relevant_chunks = get_relevant_chunks(all_chunks, query)
     
-    aggregated_info = "\n\n".join(relevant_chunks) if relevant_chunks else "No external documents provided."
+    # aggregated_info = "\n\n".join(relevant_chunks) if relevant_chunks else "No external documents provided."
 
     # 4. Generate States
     print("\n" + "="*30)
     print(" INPUT CONTEXT")
     print("="*30)
     print(f"Mission Context:\n{json.dumps(mission_context, indent=2)}")
-    print(f"\nAggregated Info from Docs:\n{aggregated_info}")
+    # print(f"\nAggregated Info from Docs:\n{aggregated_info}")
     
-    result = generate_states_with_classification(mission_context, aggregated_info, model, tokenizer)
+    # result = generate_states_with_classification(mission_context, aggregated_info, model, tokenizer)
+    result = generate_states_with_classification(mission_context, model, tokenizer)
     
     if not result or "states" not in result:
         print("✗ Failed to generate valid states.")
@@ -338,9 +345,12 @@ def main():
     print("="*30)
     if vlm_detectable:
         for s in vlm_detectable:
-            print(f"• {s.get('name')}: {s.get('Meaning', s.get('description', 'N/A'))}")
-            print(f"  Strong Cues: {s.get('Strong cues', s.get('visual_cues', 'N/A'))}")
-            print(f"  UNK Rule: {s.get('UNK rule', 'N/A')}")
+            state_name = s.get('state_name', 'Unknown')
+            cond = s.get('conditions', {})
+            print(f"• {state_name}: {cond.get('Meaning', 'N/A')}")
+            print(f"  Condition Name: {cond.get('name', 'N/A')}")
+            print(f"  Strong Cues: {cond.get('Strong cues', 'N/A')}")
+            print(f"  UNK Rule: {cond.get('UNK rule', 'N/A')}")
     else:
         print("None")
 
@@ -349,8 +359,10 @@ def main():
     print("="*30)
     if non_vlm_detectable:
         for s in non_vlm_detectable:
-            print(f"• {s.get('name')}: {s.get('Meaning', s.get('description', 'N/A'))}")
-            print(f"  UNK Rule: {s.get('UNK rule', 'N/A')}")
+            state_name = s.get('state_name', 'Unknown')
+            cond = s.get('conditions', {})
+            print(f"• {state_name}: {cond.get('Meaning', 'N/A')}")
+            print(f"  UNK Rule: {cond.get('UNK rule', 'N/A')}")
     else:
         print("None")
 

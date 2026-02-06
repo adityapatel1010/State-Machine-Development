@@ -1,5 +1,5 @@
 {
-    "mission_phases": "I dentify a person with red jacket",
-    "mission_constraints": "",
-    "mission_rules": ""
+    "mission_phases": "I want to dentify a person with red jacket",
+    "mission_constraints": "Ignore the handicap person with red jacket",
+    "mission_rules": "1) Always monitor in the night 2) Monitor in the danger zone"
 }

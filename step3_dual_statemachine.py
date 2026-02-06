@@ -111,8 +111,19 @@ class DynamicStateMachine:
             print(f"[Dynamic] Warning: {states_file} not found. Dynamic SM will be inactive.")
 
     def get_state_names(self):
-        """Return list of all VLM state names."""
-        return [s.get('name') for s in self.states]
+        """Return list of all VLM state variable names (conditions[i]['name'])."""
+        names = []
+        for s in self.states:
+            # Handle list of conditions or single dict (backward compatibility)
+            conditions = s.get('conditions', [])
+            if isinstance(conditions, dict):
+                conditions = [conditions]
+            
+            for cond in conditions:
+                name = cond.get('name')
+                if name:
+                    names.append(name)
+        return names
 
     def _extract_values(self, data):
         """Flatten JSON into a single dict for easy key lookup."""
@@ -134,63 +145,79 @@ class DynamicStateMachine:
 
         # Current target state to monitor
         target_state_obj = self.states[self.current_index]
-        target_name = target_state_obj.get("name")
+        state_name = target_state_obj.get("state_name", "Unknown")
         
+        # Normalize conditions to a list
+        conditions = target_state_obj.get("conditions", [])
+        if isinstance(conditions, dict):
+            conditions = [conditions]
+
+        if not conditions:
+            # No conditions? Move next.
+            self.current_index += 1
+            return self.process_input(data)
+
         # Flatten input to find matching keys
         flat_data = self._extract_values(data)
         
-        # Check if target state variable exists and > Threshold
-        # We normalize keys to lowercase for robust matching
-        found = False
-        
-        # 1. Exact Name Match in Keys
-        for key, val in flat_data.items():
-            if key.lower() == target_name.lower():
-                # Check value
-                try:
-                    num_val = 0.0
-                    
-                    # Handle Boolean (True -> 100, False -> 0)
-                    if isinstance(val, bool):
-                        num_val = 100.0 if val else 0.0
-                    
-                    # Handle String or Numbers
-                    else:
-                        str_val = str(val).strip().lower()
-                        
-                        # Check explicit string booleans
-                        if str_val == 'true':
-                            num_val = 100.0
-                        elif str_val == 'false':
-                            num_val = 0.0
+        # Check ALL conditions (AND Logic)
+        all_met = True
+        met_details = []
+
+        for cond in conditions:
+            target_variable = cond.get("name")
+            if not target_variable:
+                continue
+
+            # Check if this specific condition is met
+            cond_met = False
+            
+            # Search for variable in flat_data
+            for key, val in flat_data.items():
+                if key.lower() == target_variable.lower():
+                    # Check value
+                    try:
+                        num_val = 0.0
+                        if isinstance(val, bool):
+                            num_val = 100.0 if val else 0.0
                         else:
-                            # Extract number using regex (handles "95%", "Score 80", etc.)
-                            match = re.search(r'-?\d+(\.\d+)?', str_val)
-                            if match:
-                                num_val = float(match.group())
+                            str_val = str(val).strip().lower()
+                            if str_val == 'true':
+                                num_val = 100.0
+                            elif str_val == 'false':
+                                num_val = 0.0
                             else:
-                                continue # No number found
+                                match = re.search(r'-?\d+(\.\d+)?', str_val)
+                                if match:
+                                    num_val = float(match.group())
+                                else:
+                                    continue 
 
-                    if num_val > GLOBAL_VLM_THRESHOLD:
-                        found = True
-                        print(f"   [Dynamic] Detected {target_name} (Value: {val} -> {num_val} > {GLOBAL_VLM_THRESHOLD})")
-                        break
-                except ValueError:
-                    continue  # Parsing failed
+                        if num_val > GLOBAL_VLM_THRESHOLD:
+                            cond_met = True
+                            met_details.append(f"{target_variable}={num_val}")
+                            break
+                    except ValueError:
+                        continue
+            
+            if not cond_met:
+                all_met = False
+                break # Fail early if any condition is not met
 
-        if found:
+        if all_met:
             # Transition Logic
             self.current_index += 1
             if self.current_index < len(self.states):
-                next_state = self.states[self.current_index]['name']
-                print(f"   [Dynamic] >>> {target_name} completed and moving to {next_state}")
-                return f"Monitoring: {next_state}"
+                next_obj = self.states[self.current_index]
+                next_state_name = next_obj.get("state_name")
+                print(f"   [Dynamic] >>> {state_name} completed (Conditions met: {met_details}). Moving to {next_state_name}")
+                return f"Monitoring: {next_state_name}"
             else:
                 self.finished = True
-                print(f"   [Dynamic] >>> {target_name} completed. All states finished.")
+                print(f"   [Dynamic] >>> {state_name} completed. All states finished.")
                 return "Mission Complete"
         
-        return f"Monitoring: {target_name}"
+        return f"Monitoring: {state_name}"
 
 
 import argparse

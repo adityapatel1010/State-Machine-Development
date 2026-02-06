@@ -1,20 +1,32 @@
 [
     {
-        "name": "PERSON_DETECTED",
-        "Meaning": "A person has been detected in the scene.",
-        "Strong cues": "Presence of a person wearing a red jacket.",
-        "UNK rule": "Ambiguous person identification."
+        "state_name": "PersonDiscovery",
+        "detectability": "VLM_DETECTABLE",
+        "conditions": [
+            {
+                "name": "PERSON_DETECTED",
+                "Meaning": "A person has been detected in the scene.",
+                "Strong cues": "Presence of a person wearing a red jacket.",
+                "UNK rule": "Ambiguous person identification."
+            },
+            {
+                "name": "LOCATION_WARE",
+                "Meaning": "The location of the mission is known.",
+                "Strong cues": "Warehouse Sector 7 - Loading Dock",
+                "UNK rule": "Unknown location."
+            }
+        ]
     },
     {
-        "name": "LOCATION_WARE",
-        "Meaning": "The location of the mission is known.",
-        "Strong cues": "Warehouse Sector 7 - Loading Dock",
-        "UNK rule": "Unknown location."
-    },
-    {
-        "name": "ZONE_IDENTIFICATION",
-        "Meaning": "The zone in which the person is located is identified.",
-        "Strong cues": "Loading Dock",
-        "UNK rule": "Uncertain zone classification."
+        "state_name": "ZoneIdentification",
+        "detectability": "VLM_DETECTABLE",
+        "conditions": [
+            {
+                "name": "ZONE_IDENTIFICATION",
+                "Meaning": "The zone in which the person is located is identified.",
+                "Strong cues": "Loading Dock",
+                "UNK rule": "Uncertain zone classification."
+            }
+        ]
     }
 ]
