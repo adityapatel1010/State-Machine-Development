@@ -1,5 +1,5 @@
 {
-    "mission_summary": "I dentify a person with red jacket",
-    "location": "Warehouse Sector 7 - Loading Dock",
-    "operational_hours": "06:00 - 22:00 Active Shift"
+    "mission_phases": "I dentify a person with red jacket",
+    "mission_constraints": "",
+    "mission_rules": ""
 }
