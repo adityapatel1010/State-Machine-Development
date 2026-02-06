@@ -359,5 +359,14 @@ def main():
         json.dump(result, f, indent=2)
     print(f"\n✓ Saved detailed state data to MissionStates.json")
 
+    # Save segregated states
+    with open('vlm_states.json', 'w') as f:
+        json.dump(vlm_detectable, f, indent=2)
+    print(f"✓ Saved VLM states to vlm_states.json")
+
+    with open('non_vlm_states.json', 'w') as f:
+        json.dump(non_vlm_detectable, f, indent=2)
+    print(f"✓ Saved Non-VLM states to non_vlm_states.json")
+
 if __name__ == "__main__":
     main()

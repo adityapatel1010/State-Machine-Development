@@ -1,0 +1,41 @@
+{
+  "video": "shooting.mp4",
+  "block_id": 28,
+  "range_saved_idx": [
+    168,
+    173
+  ],
+  "ts": "2026-02-04T04:44:12.732259+00:00",
+  "latency_ms": 20925,
+  "gemma_timings": {
+    "prep_ms": 71,
+    "generate_wall_ms": 20925,
+    "generate_cuda_ms": 20924,
+    "decode_ms": 0,
+    "new_tokens": 267,
+    "tokens_per_sec": 12.759856630824371,
+    "max_new_tokens": 300,
+    "temperature": 0.7,
+    "do_sample": true
+  },
+  "raw_vlm_output": "```json\n{\"Summary\": \"A person in a white shirt and dark pants is aggressively confronting another person in a black and white striped shirt near a doorway. The person in the white shirt appears to be physically assaulting the other individual. Several people are seated in the waiting area, observing the altercation. The confrontation continues with the person in the white shirt pushing the person in the striped shirt towards the doorway.\", \"Chain\": \"Person confronts another person, physical altercation occurs, people observe, altercation escalates.\", \"Category\": \"Security\", \"Incident Type\": \"2\", \"Transient Level\": \"1\", \"Confidence\": \"95%\", \"Active\": \"Yes\", \"IncidentID\": \"INC-002\", \"Status\": \"Active\", \"P-POI\": \"person in white shirt, person in black and white striped shirt\", \"S-POI\": \"None\", \"O-POI\": \"doorway, waiting area, chairs\", \"Entities\": \"person in white shirt, person in black and white striped shirt, person observing\", \"Objects\": \"doorway, waiting area, chairs\", \"Prediction\": \"Physical altercation will continue\", \"VerificationAction\": \"Review security footage for further details\", \"Note on uncertainties\": \"The exact nature of the confrontation is unclear from the image.\"}\n```",
+  "summary": {
+    "Summary": "A person in a white shirt and dark pants is aggressively confronting another person in a black and white striped shirt near a doorway. The person in the white shirt appears to be physically assaulting the other individual. Several people are seated in the waiting area, observing the altercation. The confrontation continues with the person in the white shirt pushing the person in the striped shirt towards the doorway.",
+    "Chain": "Person confronts another person, physical altercation occurs, people observe, altercation escalates.",
+    "Category": "Security",
+    "Incident Type": "2",
+    "Transient Level": "1",
+    "Confidence": "95%",
+    "Active": "Yes",
+    "IncidentID": "INC-002",
+    "Status": "Active",
+    "P-POI": "person in white shirt, person in black and white striped shirt",
+    "S-POI": "None",
+    "O-POI": "doorway, waiting area, chairs",
+    "Entities": "person in white shirt, person in black and white striped shirt, person observing",
+    "Objects": "doorway, waiting area, chairs",
+    "Prediction": "Physical altercation will continue",
+    "VerificationAction": "Review security footage for further details",
+    "Note on uncertainties": "The exact nature of the confrontation is unclear from the image."
+  }
+}

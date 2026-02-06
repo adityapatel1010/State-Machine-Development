@@ -1,0 +1,39 @@
+{
+  "video": "shooting.mp4",
+  "block_id": 5,
+  "range_saved_idx": [
+    30,
+    35
+  ],
+  "ts": "2026-02-04T04:36:35.265038+00:00",
+  "latency_ms": 13052,
+  "gemma_timings": {
+    "prep_ms": 97,
+    "generate_wall_ms": 13052,
+    "generate_cuda_ms": 13052,
+    "decode_ms": 1,
+    "new_tokens": 171,
+    "tokens_per_sec": 13.101440392277047,
+    "max_new_tokens": 300,
+    "temperature": 0.7,
+    "do_sample": true
+  },
+  "raw_vlm_output": "{\"Summary\": \"A person is walking towards a doorway, then appears to enter a building. The person is seen walking away from the building shortly after.\\nChain=Person walks to doorway, enters building, exits building.\\nCategory=Normal\", \"Incident Type\": \"1\", \"Transient Level\": \"0\", \"Confidence\": \"95%\", \"Active\": \"No\", \"IncidentID\": \"INC-001\", \"Status\": \"Stable\", \"P-POI\": \"person\", \"S-POI\": \"None\", \"O-POI\": \"doorway, building\", \"Entities\": \"person\", \"Objects\": \"doorway, building\", \"Prediction\": \"Person will continue walking\", \"VerificationAction\": \"N/A\", \"Note on uncertainties\": \"Unclear if the person was carrying anything.\"}",
+  "summary": {
+    "Summary": "A person is walking towards a doorway, then appears to enter a building. The person is seen walking away from the building shortly after.\nChain=Person walks to doorway, enters building, exits building.\nCategory=Normal",
+    "Incident Type": "1",
+    "Transient Level": "0",
+    "Confidence": "95%",
+    "Active": "No",
+    "IncidentID": "INC-001",
+    "Status": "Stable",
+    "P-POI": "person",
+    "S-POI": "None",
+    "O-POI": "doorway, building",
+    "Entities": "person",
+    "Objects": "doorway, building",
+    "Prediction": "Person will continue walking",
+    "VerificationAction": "N/A",
+    "Note on uncertainties": "Unclear if the person was carrying anything."
+  }
+}

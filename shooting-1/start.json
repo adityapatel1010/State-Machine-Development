@@ -1,0 +1,13 @@
+{
+  "type": "start",
+  "run_id": "shooting-1",
+  "video": "shooting.mp4",
+  "target_fps": 6,
+  "width": 304,
+  "height": 224,
+  "target_width": null,
+  "target_height": null,
+  "duration_sec": 30.0,
+  "total_samples_estimate": 180,
+  "ts": "2026-02-04T04:35:17.384370+00:00"
+}

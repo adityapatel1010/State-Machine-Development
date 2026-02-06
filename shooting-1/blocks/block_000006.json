@@ -1,0 +1,41 @@
+{
+  "video": "shooting.mp4",
+  "block_id": 6,
+  "range_saved_idx": [
+    36,
+    41
+  ],
+  "ts": "2026-02-04T04:36:52.544279+00:00",
+  "latency_ms": 17049,
+  "gemma_timings": {
+    "prep_ms": 204,
+    "generate_wall_ms": 17049,
+    "generate_cuda_ms": 17049,
+    "decode_ms": 1,
+    "new_tokens": 227,
+    "tokens_per_sec": 13.314563904041293,
+    "max_new_tokens": 300,
+    "temperature": 0.7,
+    "do_sample": true
+  },
+  "raw_vlm_output": "{\"Summary\": \"A person in a red shirt and jeans is aggressively confronting another person in a black shirt near a doorway. The person in the red shirt appears to be physically assaulting the other individual. Several people are seated in the waiting area, observing the altercation.\", \"Chain\": \"Person confronts another person, physical altercation occurs, people observe.\", \"Category\": \"Security\", \"Incident Type\": \"2\", \"Transient Level\": \"1\", \"Confidence\": \"95%\", \"Active\": \"Yes\", \"IncidentID\": \"INC-002\", \"Status\": \"Active\", \"P-POI\": \"person in red shirt, person in black shirt\", \"S-POI\": \"None\", \"O-POI\": \"doorway, waiting area, chairs\", \"Entities\": \"person in red shirt, person in black shirt, person observing\", \"Objects\": \"doorway, waiting area, chairs\", \"Prediction\": \"Physical altercation will continue\", \"VerificationAction\": \"Review security footage for further details\", \"Note on uncertainties\": \"The exact nature of the confrontation is unclear from the image.\"}",
+  "summary": {
+    "Summary": "A person in a red shirt and jeans is aggressively confronting another person in a black shirt near a doorway. The person in the red shirt appears to be physically assaulting the other individual. Several people are seated in the waiting area, observing the altercation.",
+    "Chain": "Person confronts another person, physical altercation occurs, people observe.",
+    "Category": "Security",
+    "Incident Type": "2",
+    "Transient Level": "1",
+    "Confidence": "95%",
+    "Active": "Yes",
+    "IncidentID": "INC-002",
+    "Status": "Active",
+    "P-POI": "person in red shirt, person in black shirt",
+    "S-POI": "None",
+    "O-POI": "doorway, waiting area, chairs",
+    "Entities": "person in red shirt, person in black shirt, person observing",
+    "Objects": "doorway, waiting area, chairs",
+    "Prediction": "Physical altercation will continue",
+    "VerificationAction": "Review security footage for further details",
+    "Note on uncertainties": "The exact nature of the confrontation is unclear from the image."
+  }
+}
