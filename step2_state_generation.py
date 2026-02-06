@@ -274,10 +274,7 @@ Do not include explanations, markdown, or commentary outside the JSON.
 
     response = generate_text(model, tokenizer, prompt, max_new_tokens=1024)
     print(response)
-    # Add opening brace if not present
-    if not response.strip().startswith('{'):
-        response = '{' + response
-        
+    
     return extract_json_from_response(response)
 
 def main():
