@@ -105,21 +105,35 @@ class DynamicStateMachine:
         
         try:
             with open(states_file, 'r') as f:
-                self.states = json.load(f)
+                data = json.load(f)
+                if isinstance(data, dict) and "states" in data:
+                    self.states = data["states"]
+                elif isinstance(data, list):
+                    self.states = data
+                else:
+                    self.states = []
+                    print(f"[Dynamic] Error: Invalid format in {states_file}")
             print(f"[Dynamic] Loaded {len(self.states)} VLM states to monitor.")
         except FileNotFoundError:
             print(f"[Dynamic] Warning: {states_file} not found. Dynamic SM will be inactive.")
 
     def get_state_names(self):
-        """Return list of all VLM state variable names (conditions[i]['name'])."""
+        """Return list of all VLM state variable names from all condition categories."""
         names = []
         for s in self.states:
-            # Handle list of conditions or single dict (backward compatibility)
-            conditions = s.get('conditions', [])
-            if isinstance(conditions, dict):
-                conditions = [conditions]
+            conditions_obj = s.get('conditions', {})
+            # conditions_obj can be a dict (new schema) or list (old schema transitional)
+            all_conditions = []
             
-            for cond in conditions:
+            if isinstance(conditions_obj, dict):
+                # New Schema: Extract from all categories
+                for cat in ["phase_conditions", "rule_conditions", "constraint_conditions"]:
+                    all_conditions.extend(conditions_obj.get(cat, []))
+            elif isinstance(conditions_obj, list):
+                # Old/Transitional Schema
+                all_conditions = conditions_obj
+
+            for cond in all_conditions:
                 name = cond.get('name')
                 if name:
                     names.append(name)
@@ -147,12 +161,17 @@ class DynamicStateMachine:
         target_state_obj = self.states[self.current_index]
         state_name = target_state_obj.get("state_name", "Unknown")
         
-        # Normalize conditions to a list
-        conditions = target_state_obj.get("conditions", [])
-        if isinstance(conditions, dict):
-            conditions = [conditions]
+        # Flatten conditions from all categories
+        conditions_obj = target_state_obj.get("conditions", {})
+        target_conditions = []
+        
+        if isinstance(conditions_obj, dict):
+             for cat in ["phase_conditions", "rule_conditions", "constraint_conditions"]:
+                 target_conditions.extend(conditions_obj.get(cat, []))
+        elif isinstance(conditions_obj, list):
+             target_conditions = conditions_obj
 
-        if not conditions:
+        if not target_conditions:
             # No conditions? Move next.
             self.current_index += 1
             return self.process_input(data)
@@ -164,7 +183,7 @@ class DynamicStateMachine:
         all_met = True
         met_details = []
 
-        for cond in conditions:
+        for cond in target_conditions:
             target_variable = cond.get("name")
             if not target_variable:
                 continue
@@ -209,7 +228,7 @@ class DynamicStateMachine:
             self.current_index += 1
             if self.current_index < len(self.states):
                 next_obj = self.states[self.current_index]
-                next_state_name = next_obj.get("state_name")
+                next_state_name = next_obj.get("state_name", "Unknown")
                 print(f"   [Dynamic] >>> {state_name} completed (Conditions met: {met_details}). Moving to {next_state_name}")
                 return f"Monitoring: {next_state_name}"
             else:

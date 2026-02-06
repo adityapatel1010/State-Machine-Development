@@ -1,32 +1,34 @@
-[
-    {
-        "state_name": "PersonDiscovery",
-        "detectability": "VLM_DETECTABLE",
-        "conditions": [
-            {
-                "name": "PERSON_DETECTED",
-                "Meaning": "A person has been detected in the scene.",
-                "Strong cues": "Presence of a person wearing a red jacket.",
-                "UNK rule": "Ambiguous person identification."
-            },
-            {
-                "name": "LOCATION_WARE",
-                "Meaning": "The location of the mission is known.",
-                "Strong cues": "Warehouse Sector 7 - Loading Dock",
-                "UNK rule": "Unknown location."
+{
+    "states": [
+        {
+            "state_name": "Identify person with red jacket",
+            "detectability": "VLM_DETECTABLE",
+            "conditions": {
+                "phase_conditions": [
+                    {
+                        "name": "Target Identification",
+                        "Meaning": "Locate and identify a person wearing a red jacket.",
+                        "Strong cues": "Visual observation of a person wearing a red jacket.",
+                        "UNK rule": "None"
+                    }
+                ],
+                "rule_conditions": [
+                    {
+                        "name": "Night Monitoring",
+                        "Meaning": "The monitoring must occur during nighttime.",
+                        "Strong cues": "Low-light or dark video frames.",
+                        "UNK rule": "None"
+                    }
+                ],
+                "constraint_conditions": [
+                    {
+                        "name": "Ignore Handicap Person",
+                        "Meaning": "Do not focus on or identify a person with a handicap.",
+                        "Strong cues": "Visual cues indicating a person with a handicap (e.g., mobility aids).",
+                        "UNK rule": "None"
+                    }
+                ]
             }
-        ]
-    },
-    {
-        "state_name": "ZoneIdentification",
-        "detectability": "VLM_DETECTABLE",
-        "conditions": [
-            {
-                "name": "ZONE_IDENTIFICATION",
-                "Meaning": "The zone in which the person is located is identified.",
-                "Strong cues": "Loading Dock",
-                "UNK rule": "Uncertain zone classification."
-            }
-        ]
-    }
-]
+        }
+    ]
+}

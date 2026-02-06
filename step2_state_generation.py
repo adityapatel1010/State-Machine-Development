@@ -172,59 +172,97 @@ def generate_states_with_classification(mission_context, model, tokenizer):
     
     prompt = f"""
 <start_of_turn>user
-You are a Mission Planner with expertise in Computer Vision and Vision-Language Models.
+You are a Mission Planner with expertise in Computer Vision and Vision-Language Models (VLMs).
 
 MISSION CONTEXT (Ground Truth):
 {json.dumps(mission_context, indent=2)}
 
 OBJECTIVE:
-Derive the **minimum sufficient set of mission states** required to describe this mission at a high level from Mission Context only.
-- Do NOT enumerate implementation details.
-- Do NOT include redundant, overlapping, or trivially derived states.
-- Prefer **semantic states** over low-level signals.
-- The mission phases should define the states
+Derive the **minimum sufficient set of mission states** required to describe this mission at a high level.
+
+CRITICAL RULE (MUST FOLLOW):
+- Mission STATES must be created **ONLY from mission_phases**.
+- mission_rules and mission_constraints MUST NOT create states.
+- mission_rules and mission_constraints MUST ALWAYS appear as CONDITIONS.
+- Omitting any mission_rule or mission_constraint is INVALID.
 
 TASKS:
-1. Identify the **smallest complete set of mutually distinct states** the mission can be in.
-2. For EACH state, classify it as:
-   - VLM_DETECTABLE → Can be reliably inferred from visual evidence alone.
-   - NON_VLM_DETECTABLE → Requires internal signals, metadata, logic, or non-visual sensors.
-   - Create conditions that need to be met to achieve the state by understading the mission phase, mission constraints and mission rules.
+1. Identify the **exact set of mission states implied by mission_phases**.
+   - If there is only one mission_phase, generate ONLY one state.
+2. For EACH state:
+   - Classify detectability:
+     - VLM_DETECTABLE → State itself can be inferred from visual evidence.
+     - NON_VLM_DETECTABLE → State depends on intent or policy.
+   - Populate ALL condition categories below.
 
 DETECTABILITY CRITERIA:
 - VLM_DETECTABLE:
-  - State is visually observable by a human reviewing video frames.
-  - Strong visual patterns or objects are present.
+  - A human can reasonably infer the state from video frames alone.
 - NON_VLM_DETECTABLE:
-  - State depends on internal logic, timing, intent, configuration, or invisible conditions.
-  - No consistent visual evidence exists.
+  - Depends on logic, rules, constraints, or intent.
 
-FOR EACH STATE, PROVIDE CONDITIONS:
-- The positive conditions should be met from mission phase and mission rules.
-- The negative conditions should be met from mission contraints.
-- name: Short, precise, canonical state name.
+FOR EACH STATE, PROVIDE:
+- state_name: Canonical name derived ONLY from mission_phases.
 - detectability: "VLM_DETECTABLE" or "NON_VLM_DETECTABLE".
-- Meaning: What this state represents in mission terms.
+- conditions: MUST contain ALL three categories below.
+
+CONDITION CATEGORIES (ALL REQUIRED):
+1. phase_conditions:
+   - Conditions derived from mission_phases (what the mission is trying to do).
+2. rule_conditions:
+   - Conditions derived from mission_rules (what must always be true).
+3. constraint_conditions:
+   - Conditions derived from mission_constraints (what must NOT be true).
+
+FOR EACH CONDITION (IN ALL CATEGORIES), PROVIDE:
+- name: Short, precise condition name.
+- Meaning: Mission-level interpretation of this condition.
 - Strong cues:
-  - Concrete visual indicators.
+  - Visual cues if observable.
+  - Write "None" if not visually observable.
 - UNK rule:
-  - Conditions under which the system should mark this state as UNKNOWN due to ambiguity, missing data, or conflicting cues.
+  - When this condition should be considered UNKNOWN.
+
+CONSTRAINTS:
+- Do NOT create states from rules or constraints.
+- Do NOT omit any mission_rule or mission_constraint.
+- Each rule and constraint MUST appear exactly once per state.
+- States must be minimal, general, and non-overlapping.
 
 OUTPUT FORMAT:
 Return ONLY valid JSON matching this schema exactly:
+
 {{
   "states": [
     {{
-    "state_name":"",
-    "detectability":"VLM_DETECTABLE" or "NON_VLM_DETECTABLE",
-    "conditions":{{
-            {{
-                "name": "",
-                "Meaning": "",
-                "Strong cues": "",
-                "UNK rule": ""
-            }},
-        }}
+      "state_name": "",
+      "detectability": "VLM_DETECTABLE | NON_VLM_DETECTABLE",
+      "conditions": {{
+        "phase_conditions": [
+          {{
+            "name": "",
+            "Meaning": "",
+            "Strong cues": "",
+            "UNK rule": ""
+          }}
+        ],
+        "rule_conditions": [
+          {{
+            "name": "",
+            "Meaning": "",
+            "Strong cues": "",
+            "UNK rule": ""
+          }}
+        ],
+        "constraint_conditions": [
+          {{
+            "name": "",
+            "Meaning": "",
+            "Strong cues": "",
+            "UNK rule": ""
+          }}
+        ]
+      }}
     }}
   ]
 }}
@@ -232,11 +270,10 @@ Return ONLY valid JSON matching this schema exactly:
 Do not include explanations, markdown, or commentary outside the JSON.
 <end_of_turn>
 <start_of_turn>model
-{{
 """
 
     response = generate_text(model, tokenizer, prompt, max_new_tokens=1024)
-    
+    print(response)
     # Add opening brace if not present
     if not response.strip().startswith('{'):
         response = '{' + response
@@ -346,11 +383,17 @@ def main():
     if vlm_detectable:
         for s in vlm_detectable:
             state_name = s.get('state_name', 'Unknown')
-            cond = s.get('conditions', {})
-            print(f"• {state_name}: {cond.get('Meaning', 'N/A')}")
-            print(f"  Condition Name: {cond.get('name', 'N/A')}")
-            print(f"  Strong Cues: {cond.get('Strong cues', 'N/A')}")
-            print(f"  UNK Rule: {cond.get('UNK rule', 'N/A')}")
+            conditions_obj = s.get('conditions', {})
+            print(f"• {state_name}")
+            
+            # Print conditions by category
+            for cat in ["phase_conditions", "rule_conditions", "constraint_conditions"]:
+                cond_list = conditions_obj.get(cat, [])
+                if cond_list:
+                   print(f"  [{cat.replace('_', ' ').title()}]")
+                   for c in cond_list:
+                       print(f"    - {c.get('name')}: {c.get('Meaning', 'N/A')}")
+                       print(f"      Strong Cues: {c.get('Strong cues', 'N/A')}")
     else:
         print("None")
 
@@ -360,9 +403,15 @@ def main():
     if non_vlm_detectable:
         for s in non_vlm_detectable:
             state_name = s.get('state_name', 'Unknown')
-            cond = s.get('conditions', {})
-            print(f"• {state_name}: {cond.get('Meaning', 'N/A')}")
-            print(f"  UNK Rule: {cond.get('UNK rule', 'N/A')}")
+            conditions_obj = s.get('conditions', {})
+            print(f"• {state_name}")
+            
+            for cat in ["phase_conditions", "rule_conditions", "constraint_conditions"]:
+                cond_list = conditions_obj.get(cat, [])
+                if cond_list:
+                   print(f"  [{cat.replace('_', ' ').title()}]")
+                   for c in cond_list:
+                       print(f"    - {c.get('name')}: {c.get('Meaning', 'N/A')}")
     else:
         print("None")
 
