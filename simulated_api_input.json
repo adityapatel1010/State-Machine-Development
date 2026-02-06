@@ -1,0 +1,18 @@
+{
+    "system_id": "SYS-001",
+    "timestamp": "2024-02-05T12:00:00Z",
+    "metrics": {
+        "cpu_load": 12.5,
+        "memory_usage": "55.0",
+        "battery_level": 98,
+        "sensors": {
+            "temp_core": 75.2,
+            "pressure_main": "92",
+            "airflow": 20
+        }
+    },
+    "logs": [
+        "System started",
+        "Check complete"
+    ]
+}
