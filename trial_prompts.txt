@@ -1,0 +1,900 @@
+    
+#     prompt = f"""
+# <start_of_turn>user
+# You are a Mission Planner with expertise in Computer Vision and Vision-Language Models (VLMs).
+
+# MISSION CONTEXT (Ground Truth):
+# {json.dumps(mission_context, indent=2)}
+
+# OBJECTIVE:
+# Derive the **minimum sufficient set of mission states** required to describe this mission at a high level.
+
+# CRITICAL RULE (MUST FOLLOW):
+# - Mission STATES must be created **ONLY from mission_phases**.
+# - mission_rules and mission_constraints MUST NOT create states.
+# - mission_rules and mission_constraints MUST ALWAYS appear as CONDITIONS.
+# - Omitting any mission_rule or mission_constraint is INVALID.
+
+# TASKS:
+# 1. Identify the **exact set of mission states implied by mission_phases**.
+#    - If there is only one mission_phase, generate ONLY one state.
+# 2. For EACH state:
+#    - Classify detectability:
+#      - VLM_DETECTABLE → State itself can be inferred from visual evidence.
+#      - NON_VLM_DETECTABLE → States that cannot be inferred from visual evidence.
+#    - Populate ALL condition categories below.
+
+# DETECTABILITY CRITERIA:
+# - VLM_DETECTABLE:
+#   - A human can reasonably infer the state from video frames alone.
+#   - Can be detected as a evolving Risk, indicator of Object, Person, etc. or an Anomalous scene.
+# - NON_VLM_DETECTABLE:
+#   - Objective that cannot be observed by a human like time
+
+# FOR EACH STATE, PROVIDE:
+# - state_name: Canonical name derived ONLY from mission_phases.
+# - detectability: "VLM_DETECTABLE" or "NON_VLM_DETECTABLE".
+# - conditions: MUST contain ALL three categories below.
+
+# CONDITION CATEGORIES (ALL REQUIRED):
+# 1. phase_conditions:
+#    - Conditions derived from mission_phases (what the mission is trying to do).
+# 2. rule_conditions:
+#    - Conditions derived from mission_rules (what must always be true).
+# 3. constraint_conditions:
+#    - Conditions derived from mission_constraints (what must NOT be true).
+
+# FOR EACH VLM_DETECTABLE CONDITION, PROVIDE:
+# - name: Short, precise condition name and the name of the state should have either have 'Risk', 'Indicator' or 'Anomaly'.
+# - Meaning: Mission-level interpretation of this condition.
+# - Strong cues:
+#   - Visual cues if observable.
+#   - Write "None" if not visually observable.
+# - UNK rule:
+#   - When this condition should be considered UNKNOWN.
+
+# FOR EACH NON_VLM_DETECTABLE CONDITION, PROVIDE:
+# - Meaning: Mission-level interpretation of this condition.
+# - Value : Quantifying value mentioned or required
+
+# CONSTRAINTS:
+# - Do NOT create states from rules or constraints.
+# - Do NOT omit any mission_rule or mission_constraint.
+# - Each rule and constraint MUST appear exactly once per state.
+# - States must be minimal, general, and non-overlapping.
+
+# OUTPUT FORMAT:
+# Return ONLY valid JSON matching this schema exactly:
+
+# {{
+#   "states": [
+#     {{
+#       "state_name": "",
+#       "detectability": "VLM_DETECTABLE",
+#       "conditions": {{
+#         "phase_conditions": [
+#           {{
+#             "name": "",
+#             "Meaning": "",
+#             "Strong cues": "",
+#             "UNK rule": ""
+#           }}
+#         ],
+#         "rule_conditions": [
+#           {{
+#             "name": "",
+#             "Meaning": "",
+#             "Strong cues": "",
+#             "UNK rule": ""
+#           }}
+#         ],
+#         "constraint_conditions": [
+#           {{
+#             "name": "",
+#             "Meaning": "",
+#             "Strong cues": "",
+#             "UNK rule": ""
+#           }}
+#         ]
+#       }}
+#     }},
+#     {{
+#       "state_name": "",
+#       "detectability": "NON_VLM_DETECTABLE",
+#       "conditions": [
+#           {{
+#             "Meaning": "",
+#             "Value": ""
+#           }}
+#         ]
+#     }}
+#   ]
+# }}
+
+# Do not include explanations, markdown, or commentary outside the JSON.
+# <end_of_turn>
+# <start_of_turn>model
+# """
+
+#     prompt = f"""
+# <start_of_turn>user
+# You are a **Mission → VLM State Decomposer** (Mission Planner + Computer Vision/VLM expert).
+
+# You will be given mission context (intent, goals, phases, rules, constraints, thresholds, timers, escalation actions, reporting requirements, etc.). Your job is to translate that mission into:
+
+# 1) **VLM_DETECTABLE STATES** (things a VLM can infer from video with reasonable confidence)
+# 2) **NON_VLM_DETECTABLE REQUIREMENTS** (things that cannot be inferred from pixels alone: time windows, “for 60 minutes”, geo-fences without map, identity without enrollment, database checks, policy logic, comms actions, etc.)
+
+# KEY IDEA:
+# - A mission statement almost always mixes “visual predicates” + “non-visual logic”.
+# - You must extract the **visual predicates** and convert them into minimal mission states that are explicitly labeled as **Indicator** OR **Risk** OR **Anomaly**.
+
+# INPUT (Ground Truth):
+# {json.dumps(mission_context, indent=2)}
+
+# OBJECTIVE:
+# Produce the **minimum sufficient set** of VLM-detectable mission states (Indicators/Risks/Anomalies) + a complete list of all non-VLM requirements.
+
+# CRITICAL RULES (MUST FOLLOW):
+# A) **States are created ONLY from VLM-detectable visual predicates**, NOT from timing, policy, workflow, or actions.
+# B) Every mission element must be accounted for somewhere:
+#    - If it is visually inferable → it must appear in at least one VLM state as a VLM condition.
+#    - If it is not visually inferable → it must appear in NON_VLM_REQUIREMENTS.
+# C) State names MUST end with exactly one suffix: **Indicator** OR **Risk** OR **Anomaly**.
+# D) Do NOT hallucinate capabilities:
+#    - If detection would require identity verification, special sensors, audio, biometric data, RFID, or external systems → mark as NON_VLM_DETECTABLE unless the context explicitly provides that sensor/data.
+# E) Avoid spam:
+#    - Do not create a state for every tiny adjective. Merge logically into minimal, non-overlapping states.
+# F) Confidence discipline:
+#    - If something is ambiguous from video, include an **UNK rule** and use UNKNOWN rather than forcing a positive.
+
+# HOW TO DECIDE INDICATOR vs RISK vs ANOMALY:
+# - **Indicator**: a specific visual attribute or presence relevant to mission (e.g., “PersonWearingRedJacketIndicator”, “VehicleInRestrictedLaneIndicator”).
+# - **Risk**: a behavior/situation that implies potential harm/escalation (e.g., “PersonAggressionRisk”, “CollisionNearMissRisk”, “WeaponPresenceRisk”).
+# - **Anomaly**: a pattern that is out-of-baseline or unexpected for the scene/phase (e.g., “LoiteringInNoStopZoneAnomaly”, “UnusualObjectDropOffAnomaly”, “UnexpectedCrowdSurgeAnomaly”).
+
+# DETECTABILITY GUIDELINES:
+# VLM_DETECTABLE (visual-only):
+# - clothing color/type, object presence, posture, gestures, proximity, motion patterns, entry/exit, interaction sequences, crowding, loitering (visual), near-miss (visual), smoke/fire (visual), dropped objects (visual), forced entry (visual cues)
+
+# NON_VLM_DETECTABLE (not from pixels alone unless explicit sensors/data exist):
+# - “watch for 60 minutes”, time thresholds, schedules, identity confirmation, watchlists, “authorized vs unauthorized” without badge system, geofence math without map, calling/dispatching, database checks, policy compliance that needs records, “intent” without observable cues, internal SOP actions
+
+# TASKS:
+# 1) Parse the mission and extract a list of **atomic requirements**, each tagged as:
+#    - VISUAL_PREDICATE (VLM_DETECTABLE)
+#    - NON_VISUAL_REQUIREMENT (NON_VLM_DETECTABLE)
+# 2) Convert VISUAL_PREDICATE items into the **minimum sufficient set of STATES**, each labeled Indicator/Risk/Anomaly.
+# 3) For EACH VLM STATE, define its VLM conditions with:
+#    - name (short predicate)
+#    - Meaning (mission-level interpretation)
+#    - Strong cues (purely visual cues; if none, write "None")
+#    - UNK rule (when to output UNKNOWN due to occlusion/distance/lighting/camera angle)
+#    - confidence_notes (what would make it unreliable)
+# 4) For EACH NON_VLM requirement, include:
+#    - name
+#    - Meaning
+#    - Value (include numeric thresholds, durations, counts, “60 minutes”, etc. if present)
+#    - depends_on (which VLM states/conditions it uses as inputs, if any)
+
+# OUTPUT FORMAT:
+# Return ONLY valid JSON matching this schema exactly:
+
+# {{
+#   "vlm_states": [
+#     {{
+#       "state_name": "ExampleIndicator|ExampleRisk|ExampleAnomaly",
+#       "detectability": "VLM_DETECTABLE",
+#       "state_type": "Indicator|Risk|Anomaly",
+#       "derived_from": {{
+#         "mission_intent": ["..."],
+#         "mission_goals": ["..."],
+#         "mission_phases": ["..."],
+#         "mission_rules": ["..."],
+#         "mission_constraints": ["..."]
+#       }},
+#       "vlm_conditions": [
+#         {{
+#           "name": "",
+#           "Meaning": "",
+#           "Strong cues": "",
+#           "UNK rule": "",
+#           "confidence_notes": ""
+#         }}
+#       ]
+#     }}
+#   ],
+#   "non_vlm_requirements": [
+#     {{
+#       "name": "",
+#       "Meaning": "",
+#       "Value": "",
+#       "depends_on": ["StateName1", "StateName2"]
+#     }}
+#   ],
+#   "coverage_check": {{
+#     "all_mission_items_accounted_for": true,
+#     "unaccounted_items": []
+#   }}
+# }}
+
+# IMPORTANT OUTPUT RULES:
+# - Output JSON only. No markdown. No commentary.
+# - Every mission rule/constraint/goal/phase/intent must appear either inside:
+#   - a state's "derived_from" and/or as a vlm_condition, OR
+#   - non_vlm_requirements
+# - If something is partially visual + partially non-visual, split it:
+#   - visual part becomes a VLM state/condition
+#   - non-visual part becomes a NON_VLM requirement (and depends_on the visual state)
+
+# <end_of_turn>
+# <start_of_turn>model
+# """
+
+#     prompt = f"""
+# <start_of_turn>user
+# You are a **Mission Decomposer → VLM Capability Mapper**.
+# Your job is to take ANY mission intent/goals/phases/rules/constraints written in free-form natural language (may be long, multi-sentence, contain negations, special characters, thresholds, percentages, distances, and time) and produce:
+
+# 1) **VLM_DETECTABLE states** (only what can be inferred from pixels/video frames)
+# 2) **NON_VLM_DETECTABLE requirements** (anything that needs time accumulation, external context, identity systems, maps, databases, policy, or actions outside the frame)
+
+# You must be **input-faithful**:
+# - DO NOT invent values (e.g., NEVER convert 60 seconds to 60 minutes).
+# - Copy numeric values, units, and negations EXACTLY as written.
+# - If the input is ambiguous, mark UNKNOWN or push it to NON_VLM_DETECTABLE rather than guessing.
+
+# INPUT (Ground Truth):
+# {json.dumps(mission_context, indent=2)}
+
+# ========================
+# ABSOLUTE RULES (MUST FOLLOW)
+# ========================
+
+# R0. **NO FABRICATION / NO NORMALIZATION**
+# - If input says "60 seconds" output MUST say "60 seconds" (not 1 minute, not 60 minutes).
+# - If input says "≤10m", output MUST preserve "≤10m".
+# - Preserve symbols, %, ranges (e.g., 10–20), inequalities, "not", "unless", "except", "ignore", etc.
+
+# R1. **ONLY CREATE VLM STATES WHEN VISUAL EVIDENCE IS PLAUSIBLE**
+# - If you cannot reasonably decide from the video alone → do NOT create a VLM state for it.
+# - Put it in NON_VLM_DETECTABLE (or as a dependency condition requiring external data).
+
+# R2. **VLM STATES MUST BE ONE OF ONLY THREE TYPES**
+# - Indicator (presence/attribute)
+# - Risk (behavior/safety/escalation)
+# - Anomaly (out-of-baseline / unexpected pattern)
+# State names MUST end with exactly one suffix: Indicator OR Risk OR Anomaly.
+
+# R3. **RULES/CONSTRAINTS DO NOT AUTOMATICALLY BECOME STATES**
+# - Rules/constraints are NOT states by default.
+# - They become:
+#   a) VLM conditions inside an existing state IF purely visual and relevant, OR
+#   b) NON_VLM requirements if not purely visual, OR
+#   c) gating logic (depends_on) if they modify when a state is active.
+# - Example: "Only at night" is NOT automatically "NighttimeAnomaly".
+#   It is a CONDITION if night/day is visually inferable; otherwise NON_VLM.
+
+# R4. **MAP/ZONES**
+# - "Danger zone", "restricted area", "geofence", "inside Zone A" are NON_VLM unless:
+#   - the zone boundary is visually marked and unambiguous in-frame (paint lines, signage, labeled boundary), OR
+#   - the context explicitly provides calibrated map/geo alignment inputs.
+# If map/geo is required, classify as NON_VLM.
+
+# R5. **TIME / DURATION / PERSISTENCE**
+# - Anything requiring a timer or accumulation across time (e.g., "for 60 seconds", "loitering > 2 min", "watch for 1 hr", "repeat 3 times") is NON_VLM_DETECTABLE as a requirement,
+#   BUT the *visual predicate it depends on* is VLM_DETECTABLE (e.g., "PersonWearingRedJacketIndicator", "PersonLoiteringAnomaly").
+# So split into:
+# - VLM state: what is seen
+# - NON_VLM requirement: duration/count threshold; depends_on that state
+
+# R6. **NEGATIONS / EXCEPTIONS**
+# - If the mission says "Ignore X", "Alert unless X", "Do NOT track Y", those must be represented as explicit gating requirements.
+# - Do NOT silently drop them.
+# - Do NOT invert them.
+
+# R7. **DISABILITY / “HANDICAP PERSON” HANDLING**
+# - If the mission explicitly uses terms like "handicap person / disabled person / wheelchair user", treat it as:
+#   - VLM_DETECTABLE only if the attribute is visually inferable with reasonable reliability (e.g., wheelchair, cane, visible prosthetic).
+#   - Otherwise mark UNKNOWN and/or classify as NON_VLM_DETECTABLE.
+# - IMPORTANT: If it is used as an "ignore" filter, represent it as a gating requirement (do not create a separate state unless it is needed as a VLM predicate to apply the filter).
+
+# R8. **MINIMUM SUFFICIENT OUTPUT**
+# - Do NOT force creation of Indicator/Risk/Anomaly categories if the mission doesn't imply them.
+# - Create only the states that are necessary and plausible.
+
+# ========================
+# WORKFLOW YOU MUST EXECUTE
+# ========================
+# Step 1) Extract **atomic mission clauses** from ALL fields (intent/goals/phases/rules/constraints).
+# - Output them as a list with an exact quote of each clause.
+
+# Step 2) For each clause, decide:
+# A) VISUAL_PREDICATE (VLM_DETECTABLE)
+# B) NON_VISUAL_LOGIC (NON_VLM_DETECTABLE)
+# C) MIXED → split into (A + B) parts
+
+# Step 3) Merge VISUAL_PREDICATE items into minimal **VLM STATES** (Indicator/Risk/Anomaly).
+# - Do NOT create states from timers, zones, permissions, policies.
+
+# Step 4) Convert NON_VISUAL_LOGIC parts into **NON_VLM_REQUIREMENTS**
+# - Keep exact values/units/symbols
+# - Each must have depends_on if it uses a VLM state as input.
+
+# ========================
+# OUTPUT FORMAT (JSON ONLY)
+# ========================
+# Return ONLY valid JSON matching this schema exactly:
+
+# {{
+#   "atomic_clause_extraction": [
+#     {{
+#       "source_field": "mission_intent|mission_goals|mission_phases|mission_rules|mission_constraints|other",
+#       "clause_text_exact": ""
+#     }}
+#   ],
+#   "vlm_states": [
+#     {{
+#       "state_name": "",
+#       "detectability": "VLM_DETECTABLE",
+#       "state_type": "Indicator|Risk|Anomaly",
+#       "vlm_conditions": [
+#         {{
+#           "name": "",
+#           "Meaning": "",
+#           "Strong cues": "None|<visual cues>",
+#           "UNK rule": "",
+#           "confidence_notes": ""
+#         }}
+#       ]
+#     }}
+#   ],
+#   "non_vlm_requirements": [
+#     {{
+#       "name": "",
+#       "Meaning": "",
+#       "Value": "",
+#       "depends_on": ["..."]
+#     }}
+#   ],
+#   "coverage_check": {{
+#     "all_atomic_clauses_accounted_for": true,
+#     "unaccounted_clauses": []
+#   }}
+# }}
+
+# QUALITY CHECKS (MUST PASS BEFORE OUTPUT):
+# - Every atomic clause_text_exact appears either:
+#   - within at least one VLM state's condition Meaning/name, OR
+#   - within non_vlm_requirements Meaning/Value
+# - No unit/value conversions (seconds stay seconds, meters stay meters, % stays %).
+# - No invented clauses.
+# - No “nighttime anomaly” unless the mission explicitly requests anomaly/baseline deviation.
+
+# <end_of_turn>
+# <start_of_turn>model
+# """
+#     prompt = f"""
+# <start_of_turn>user
+# You are a **Mission Decomposer → VLM Capability Mapper** for a system where:
+
+# - The VLM outputs ONLY **per-frame (or per-short-window) scores 0–100** for visual predicates.
+# - The VLM does **NOT** reliably compute: absolute time, durations, meters/feet, speed, trajectories, map zones, identity verification, event counts across minutes, policy logic, or any external database check.
+# - Those MUST be handled by NON_VLM logic (state machine / tracker / timers / calibration / external systems).
+
+# Your job: take ANY mission intent/goals/phases/rules/constraints written in free-form natural language (long, multi-sentence, negations, symbols, %, ranges, thresholds, time, distances, etc.) and produce:
+
+# 1) **VLM_DETECTABLE states**: ONLY visual predicates that can be scored 0–100 from frames (Indicator/Risk/Anomaly).
+# 2) **NON_VLM_DETECTABLE requirements**: ANY timing/duration/counting/distance/zone/policy/external-lookup logic that must be computed outside VLM.
+
+# You must be **input-faithful**:
+# - DO NOT invent values (e.g., NEVER convert 60 seconds to 60 minutes).
+# - Copy numeric values, units, and negations EXACTLY as written.
+# - If ambiguous, output UNKNOWN or classify as NON_VLM rather than guessing.
+
+# INPUT (Ground Truth):
+# {json.dumps(mission_context, indent=2)}
+
+# ========================
+# ABSOLUTE RULES (MUST FOLLOW)
+# ========================
+
+# R0. **NO FABRICATION / NO NORMALIZATION**
+# - Preserve numbers, symbols, units, inequalities, %, ranges, negations EXACTLY as written.
+# - Do NOT paraphrase numeric expressions; copy them verbatim in Value fields.
+
+# R1. **HARD BAN: TIME / DISTANCE / COUNTS ARE NOT VLM STATES**
+# The following MUST NEVER appear inside a VLM state’s Meaning or name unless it is literally visible text in-frame (e.g., a sign that says "5m"):
+# - time units: seconds, sec, s, minutes, min, hours, hr, days
+# - distance units: meters, m, feet, ft, inches, km, miles
+# - speed/physics: mph, kph, velocity, acceleration, trajectory, ETA
+# - windowed counting: "≥3 events", "within 15 minutes", "for >5 frames", "repeat N times"
+# If present in mission text, it MUST be represented as NON_VLM_REQUIREMENTS that depend_on visual states.
+
+# R2. **VLM STATES MUST BE ONE OF ONLY THREE TYPES**
+# - Indicator: presence/attribute (e.g., RedJacketIndicator, NameBadgeVisibleIndicator)
+# - Risk: visually inferable hazard/escalation (e.g., AggressionRisk, WeaponPresenceRisk)
+# - Anomaly: visually unexpected/out-of-baseline pattern (e.g., ObjectDropOffAnomaly, UnusualCrowdSurgeAnomaly)
+# State names MUST end with exactly one suffix: Indicator OR Risk OR Anomaly.
+
+# R3. **ONLY CREATE VLM STATES WHEN VISUAL EVIDENCE IS PLAUSIBLE**
+# - If you cannot reasonably infer it from pixels alone → do NOT create a VLM state.
+# - Put it in NON_VLM_REQUIREMENTS (or mark UNKNOWN) instead.
+
+# R4. **RULES/CONSTRAINTS DO NOT AUTOMATICALLY BECOME STATES**
+# Rules/constraints become:
+# - VLM conditions only if they are purely visual predicates, OR
+# - NON_VLM requirements (timers, schedules, zones, policies, external checks), OR
+# - gating rules (depends_on logic) that modify alerting/escalation.
+
+# R5. **MAP/ZONES**
+# - "danger zone", "restricted area", "geofence", "Zone A", "within 2m of X" are NON_VLM unless:
+#   - boundary is visually marked and unambiguous in-frame AND does NOT require metric units, OR
+#   - mission_context explicitly provides calibrated map/geo alignment.
+# Otherwise: NON_VLM with UNKNOWN rules if not visible.
+
+# R6. **NEGATIONS / EXCEPTIONS / UNLESS**
+# - Preserve "ignore", "do not", "unless", "except" as NON_VLM gating logic unless the condition is purely visual.
+# - Do NOT silently drop or invert.
+
+# R7. **ATTRIBUTES LIKE DISABILITY / AGE / IDENTITY**
+# - If visually inferable (wheelchair/cane/prosthetic visible) → can be a VLM Indicator (e.g., WheelchairPresentIndicator).
+# - If not reliably inferable (medical condition, invisible disability, authorized/employee without visible cue) → NON_VLM or UNKNOWN.
+
+# R8. **MINIMUM SUFFICIENT OUTPUT**
+# - Do not force a Risk or Anomaly unless the mission implies a visually inferable risk/anomaly.
+# - It's valid for output to contain only Indicators if the mission is mostly rule logic.
+
+# ========================
+# WORKFLOW YOU MUST EXECUTE
+# ========================
+
+# Step 1) Extract atomic clauses EXACTLY as written from ALL mission fields.
+# - Split by conjunctions: and/or/then/unless/except/within/for/if/only if/≥/≤/>/<
+# - Keep clause_text_exact identical to input text fragments.
+
+# Step 2) For each atomic clause, label it as:
+# A) VISUAL_ATOM (VLM_DETECTABLE): a predicate you can score from frames
+# B) NON_VISUAL_LOGIC (NON_VLM_DETECTABLE): time/distance/count/zone/policy/external check
+# C) MIXED: must be split into a VISUAL_ATOM part + NON_VISUAL_LOGIC part
+
+# Step 3) Convert VISUAL_ATOM items into minimal VLM states.
+# - States should describe ONLY the visual atom(s).
+# - Each state must have vlm_conditions with Strong cues + UNK rule.
+
+# Step 4) Convert NON_VISUAL_LOGIC parts into NON_VLM_REQUIREMENTS.
+# - Keep exact numeric/units/symbols in the Value field.
+# - depends_on must reference the VLM state(s) that provide inputs.
+
+# ========================
+# OUTPUT FORMAT (JSON ONLY)
+# ========================
+# Return ONLY valid JSON matching this schema exactly:
+
+# {{
+#   "atomic_clause_extraction": [
+#     {{
+#       "source_field": "mission_intent|mission_goals|mission_phases|mission_rules|mission_constraints|other",
+#       "clause_text_exact": "",
+#       "classification": "VISUAL_ATOM|NON_VISUAL_LOGIC|MIXED",
+#       "split": {{
+#         "visual_atom_text_exact": "",
+#         "non_visual_logic_text_exact": ""
+#       }}
+#     }}
+#   ],
+#   "vlm_states": [
+#     {{
+#       "state_name": "",
+#       "detectability": "VLM_DETECTABLE",
+#       "state_type": "Indicator|Risk|Anomaly",
+#       "vlm_conditions": [
+#         {{
+#           "name": "",
+#           "Meaning": "",
+#           "Strong cues": "",
+#           "UNK rule": "",
+#           "confidence_notes": ""
+#         }}
+#       ]
+#     }}
+#   ],
+#   "non_vlm_requirements": [
+#     {{
+#       "name": "",
+#       "Meaning": "",
+#       "Value": "",
+#       "depends_on": ["..."],
+#       "unknown_when": ""
+#     }}
+#   ],
+#   "coverage_check": {{
+#     "all_atomic_clauses_accounted_for": true,
+#     "unaccounted_clauses": [],
+#     "invalid_vlm_states": []
+#   }}
+# }}
+
+# ========================
+# FINAL SELF-VALIDATION (MUST DO BEFORE OUTPUT)
+# ========================
+# 1) Scan all VLM state_name, Meaning, and condition names for banned tokens:
+#    - any time unit (sec, second, min, minute, hour, day)
+#    - any distance unit (m, meter, ft, feet, km, mile)
+#    - any event counting/window wording (≥, ≤, within, for, consecutive frames, repeat, times)
+#    If found: move that concept to NON_VLM_REQUIREMENTS and remove it from VLM states.
+# 2) Confirm every number/unit from input appears verbatim somewhere in NON_VLM_REQUIREMENTS Value (not mutated).
+# 3) Ensure no "night anomaly" or "zone anomaly" is created unless explicitly requested as anomaly and is visually inferable without meters/time.
+# 4) Ensure depends_on references only existing VLM state_names.
+
+# <end_of_turn>
+# <start_of_turn>model
+# """
+#     prompt = f"""
+# <start_of_turn>user
+# You are a **Universal Mission → Visual Atom Extractor (VLM Capability Mapper)**.
+
+# SYSTEM ASSUMPTION (DO NOT VIOLATE):
+# - The VLM can only output **0–100 confidence scores** for VISUAL ATOMS (things directly inferable from pixels).
+# - The VLM is NOT responsible for timers, meters/feet, counting, tracking persistence, map geometry, schedules, escalation policy, or external verification. Those are computed outside the VLM.
+
+# GOAL:
+# Given ANY mission_intent / mission_goals / mission_phases / mission_rules / mission_constraints (free-form, multi-sentence, negations, symbols, numbers), produce a complete set of:
+# 1) **VLM_STATES** = VISUAL ATOMS only (each one is an Indicator, Risk, or Anomaly)
+# 2) **NON_VLM_REQUIREMENTS** = all non-visual logic, expressed as rules that depend_on VLM_STATES
+
+# CRITICAL BEHAVIOR:
+# - Your main failure mode to avoid is **missing visual atoms**. You must be exhaustive in extracting visual atoms.
+# - A second failure mode is **creating fake visual atoms** for time/distance/zones. You must not.
+
+# INPUT (Ground Truth):
+# {json.dumps(mission_context, indent=2)}
+
+# =====================================================
+# A. DEFINITIONS (THESE ARE STRICT)
+# =====================================================
+
+# VISUAL ATOM (VLM_DETECTABLE):
+# A predicate that a human can infer from pixels WITHOUT needing:
+# - time accumulation (seconds/minutes/hours)
+# - metric distance (meters/feet) or calibrated geometry
+# - identity verification (DB lookup, badge database, access control)
+# - map/geo coordinates
+# - event counting across windows
+# - external tools (OCR/QR decode) unless explicitly provided as part of the system
+
+# Examples of VISUAL ATOMS (not exhaustive):
+# - clothing/color/appearance attributes (red jacket, backpack, helmet)
+# - objects present (package, weapon-like object, badge visible)
+# - interactions (handoff gesture, pushing, striking, grabbing, dropping object)
+# - behaviors (running, loitering-as-visual-pattern, aggressive posture)
+# - signage / markings visible (EXIT sign visible, "STAFF ONLY" text visible, boundary tape visible)
+# - occlusion/visibility quality (subject occluded, too dark, blur)
+
+# NON-VISUAL LOGIC (NON_VLM):
+# Anything involving:
+# - durations (“within 10 seconds”, “for 60 seconds”, “within 15 minutes”)
+# - counting events (“≥3 times”)
+# - metric distance (“>5 meters”, “within 2m”)
+# - “inside danger zone” unless boundary is visually marked WITHOUT meters
+# - schedules (“night”, “business hours”) unless defined purely by pixel brightness threshold AND you are told to do that
+# - “employee status verification” beyond “badge visible”
+# - QR/Barcode readability/decoding unless explicit QR decoding tool exists
+
+# =====================================================
+# B. HARD RULES (MUST FOLLOW)
+# =====================================================
+
+# R0) INPUT-FAITHFULNESS
+# - Preserve every number/unit/symbol exactly as written in the NON_VLM requirement Value.
+# - Never convert units (seconds↔️minutes).
+
+# R1) DO NOT LOSE VISUAL ATOMS
+# - If a clause contains ANY visually inferable concept, you MUST extract it as a VLM state or VLM condition.
+# - Clauses often mix atoms + logic: split them.
+
+# R2) DO NOT CREATE VLM STATES FOR TIME/DISTANCE/COUNTS/ZONES
+# - A VLM state must never include time (sec/min/hr), meters/feet, or “within X”.
+# - Those belong in NON_VLM_REQUIREMENTS and must depend_on VLM states.
+
+# R3) ZONES MUST BE SPLIT
+# - “emergency exit sign” is a VISUAL ATOM (sign visible).
+# - “within 2m of the sign” is NON_VLM logic.
+# - “danger zone” is NON_VLM unless the mission defines it with purely visible boundary markers (tape/paint/sign).
+
+# R4) EMPLOYEE/UNLESS LOGIC MUST BE SPLIT
+# - “visible name badge” is a VISUAL ATOM.
+# - “employee status” is NON_VLM unless explicitly defined as “badge visible implies employee”.
+
+# R5) STATE NAMING
+# - Each VLM state_name must end in exactly one of: Indicator, Risk, Anomaly.
+# - Prefer Indicator for attributes/presence, Risk for harmful/escalatory behaviors, Anomaly for out-of-baseline patterns.
+
+# R6) MINIMUM BUT COMPLETE
+# - You should NOT create redundant states, but completeness of visual atoms is the priority.
+# - If unsure whether something is detectable, include it as a VLM state with a strong UNK rule, OR classify it as NON_VLM.
+
+# =====================================================
+# C. REQUIRED EXTRACTION PROCEDURE (DO THIS IN ORDER)
+# =====================================================
+
+# STEP 1 — ATOMIC SPLITTING (EXHAUSTIVE)
+# From every mission field, split text into smallest clauses around:
+# - if/then/and/or/unless/except/within/for/more than/less than/≥/≤/>/<
+# - also split “A then B” into A and B
+# Each output item must be an exact substring quote.
+
+# STEP 2 — TAG EACH ATOMIC CLAUSE WITH ONE OR MORE TAGS
+# For each atomic clause, produce:
+# - visual_atoms_found: list of short phrases that are visually inferable
+# - non_visual_logic_found: list of short phrases that are not visually inferable
+
+# IMPORTANT:
+# - A single atomic clause can produce multiple visual atoms.
+# Example: “handoff … unless badge visible” yields:
+#   visual_atoms_found = ["object handoff gesture", "name badge visible"]
+#   non_visual_logic_found = ["alert gating unless ..."]
+
+# STEP 3 — BUILD VLM STATES FROM VISUAL ATOMS (COMPLETE LIST)
+# Create a VLM state for EACH distinct visual atom (merge only when identical).
+# DO NOT create “DangerZoneIndicator”, “NightIndicator”, “DistanceIndicator”, “TimeIndicator”.
+# Instead, create the underlying visual atoms:
+# - ExitSignVisibleIndicator
+# - StaffOnlyMarkerVisibleIndicator
+# - BoundaryTapeVisibleIndicator (if relevant)
+# - ObjectHandoffIndicator
+# - NameBadgeVisibleIndicator
+# - JacketColorUncertainIndicator (or VisibilityDegradedAnomaly) if visibility itself is a visual atom
+
+# STEP 4 — BUILD NON_VLM REQUIREMENTS
+# For every non-visual logic item, create a requirement that:
+# - preserves exact numeric values/units/symbols in Value
+# - references depends_on VLM state_names that provide the needed visual signals
+
+# STEP 5 — COVERAGE & VALIDATION (MUST BE STRICT)
+# - Every extracted atomic clause must be accounted for by:
+#   - at least one VLM state in vlm_states OR
+#   - at least one non_vlm_requirement
+# - Additionally: Every VISUAL ATOM phrase extracted must map to an actual VLM state_name.
+# - VLM states must not contain banned tokens (sec/min/hr/m/ft/km/within/≥/≤/>/<) in their state_name or Meaning.
+
+# =====================================================
+# D. OUTPUT FORMAT (JSON ONLY)
+# =====================================================
+# Return ONLY valid JSON matching this schema exactly:
+
+# {{
+#   "atomic_clause_extraction": [
+#     {{
+#       "source_field": "mission_intent|mission_goals|mission_phases|mission_rules|mission_constraints|other",
+#       "clause_text_exact": "",
+#       "visual_atoms_found": [""],
+#       "non_visual_logic_found": [""]
+#     }}
+#   ],
+#   "vlm_states": [
+#     {{
+#       "state_name": "",
+#       "detectability": "VLM_DETECTABLE",
+#       "state_type": "Indicator|Risk|Anomaly",
+#       "vlm_conditions": [
+#         {{
+#           "name": "",
+#           "Meaning": "",
+#           "Strong cues": "",
+#           "UNK rule": "",
+#           "confidence_notes": ""
+#         }}
+#       ]
+#     }}
+#   ],
+#   "non_vlm_requirements": [
+#     {{
+#       "name": "",
+#       "Meaning": "",
+#       "Value": "",
+#       "depends_on": ["..."],
+#       "unknown_when": ""
+#     }}
+#   ],
+#   "coverage_check": {{
+#     "all_atomic_clauses_accounted_for": true,
+#     "unaccounted_clauses": [],
+#     "visual_atoms_without_states": [],
+#     "invalid_vlm_states": []
+#   }}
+# }}
+
+# DO NOT output explanations or markdown.
+
+# <end_of_turn>
+# <start_of_turn>model
+# """
+    prompt = f"""
+<start_of_turn>user
+You are a **Universal Mission Decomposer → Mission-Semantic VLM State Mapper**.
+
+SYSTEM CONTRACT (NON-NEGOTIABLE):
+- Output is used to program a VLM that only returns **0–100 confidence scores** for **mission-semantic states**.
+- You MUST produce states in exactly three categories: **Indicator**, **Risk**, **Anomaly**.
+- VLM does NOT compute: timers/durations/windows, event counts across windows, metric distance/speed/trajectory, calibrated geometry, geofences/maps/zones, schedules, identity verification, role binding ("tracked person", "receiving person", "the two"), “who crossed/entered/exited”, or policy actions. Those are **NON_VLM_REQUIREMENTS**.
+
+INPUT (Ground Truth):
+{json.dumps(mission_context, indent=2)}
+
+========================================================
+ABSOLUTE RULES (MUST FOLLOW)
+========================================================
+
+R0) INPUT-FAITHFULNESS (NO FABRICATION / NO NORMALIZATION)
+- Preserve all numbers, units, symbols, ranges, inequalities, and negations EXACTLY as written.
+- Never convert units (e.g., seconds→minutes).
+
+R1) MISSION-SEMANTIC VISUAL ATOMS ONLY (CRITICAL)
+A mission_semantic_visual_atom MUST be a meaningful, mission-level visual concept, such as:
+- **attribute + entity** (e.g., "red jacket", "visible badge", "weapon-like object", "taped boundary line")
+- **interaction / action / behavior** (e.g., "hands object to another person", "drops package", "pushes person", "aggressive posture")
+- **signage/marker visible** (e.g., "EXIT sign visible", "STAFF ONLY marker visible")
+- **visibility/quality condition** (e.g., "subject occluded", "severe blur", "low light")
+
+You MUST NOT output generic primitives as atoms or states.
+
+BANNED AS VISUAL ATOMS AND AS VLM STATES (unless explicitly requested as the mission goal):
+- person, people, human, hand, object, motion, detected, present, bbox, tracking, pose, face
+- snake_case variants (person_detected, hand_detected, object_present, etc.)
+
+If you see these words in the mission text, you must attach them to mission meaning:
+- "hands object" is valid; "object" alone is invalid.
+- "person wearing red jacket" is valid; "person" alone is invalid.
+
+R2) VLM STATE NAMING (STRICT)
+- Each state_name MUST be PascalCase and MUST end with exactly one suffix:
+  **Indicator** OR **Risk** OR **Anomaly**.
+- state_name MUST NOT contain: detected, present, bbox, tracking.
+- If you cannot form a mission-semantic state, do NOT create a primitive state. Move it to NON_VLM or mark UNKNOWN.
+
+R3) HARD BAN: TIME/DISTANCE/COUNT/ZONES/CROSSING INSIDE VLM STATES
+No VLM state_name, vlm_conditions.name, or vlm_conditions.Meaning may include:
+- time/duration/windows: within/for/after + seconds/minutes/hours/days/consecutive frames
+- distance/speed/trajectory: meters/feet/km/miles/mph/kph/trajectory/velocity
+- counting/aggregation: ≥/≤/>/<, "N times", "count within window"
+- crossing/entered/exited/separated-by-X as a VLM state
+
+These MUST become NON_VLM_REQUIREMENTS.
+
+R4) TRACKING / ROLE BINDING / "WHO DID WHAT" IS NON_VLM
+If mission text includes: tracked person, same person, receiving person, the two, then/after, follow, separate, cross, enter, exit,
+you MUST create NON_VLM_REQUIREMENTS that:
+- include required_modules = "tracker" (and timer/calibration/roi_polygon if needed)
+- bind roles explicitly in Meaning (e.g., giver vs receiver, subject track vs other track)
+VLM provides atoms; tracker binds them to TrackIDs/roles.
+
+R5) ZONES / GEOFENCES
+- “danger zone / restricted area / within X meters / inside zone” are NON_VLM unless boundary is purely visible and non-metric.
+- VLM may detect boundary markers/signage/lines as Indicators (e.g., "BoundaryMarkerVisibleIndicator").
+- The event "crossed boundary / entered zone / exited zone" is ALWAYS NON_VLM (tracker + boundary geometry).
+
+R6) IDENTITY / EMPLOYEE / AUTHORIZATION
+- “employee/authorized/registered” is NON_VLM unless mission explicitly defines a purely visual proxy.
+- VLM can output “badge visible” as Indicator; verifying employee status is NON_VLM and may require external lookup.
+- Do NOT assume OCR/QR is available unless mission explicitly says "read/recognize/decode".
+
+R7) MODULE SELECTION MUST BE EXPLICITLY JUSTIFIED BY TEXT
+Allowed modules:
+["tracker","timer","calibration","roi_polygon","map_geo","access_control_db","ocr","qr_decoder","policy_engine","logger"]
+
+Only include:
+- ocr if text explicitly requires reading text/letters/numbers
+- qr_decoder if mission explicitly requires decoding QR/barcode
+- access_control_db if mission explicitly requires verification via database/lookup
+Otherwise do NOT include these modules.
+
+R8) DEPENDENCY CORRECTNESS
+- Every non_vlm_requirements.depends_on must reference ONLY vlm_states.state_name entries.
+- No dependency may reference banned primitive states.
+
+========================================================
+REQUIRED WORKFLOW (DO IN ORDER)
+========================================================
+
+STEP 1 — ATOMIC CLAUSE EXTRACTION (EXHAUSTIVE)
+Split all mission text (intent/goals/phases/rules/constraints) into smallest clauses using:
+if/then/and/or/unless/except/within/for/>/< ≥ ≤ ; , .
+Each clause_text_exact must be an exact substring quote (no paraphrase).
+
+STEP 2 — PER-CLAUSE CLASSIFICATION (EXHAUSTIVE)
+For each atomic clause, produce:
+- mission_semantic_visual_atoms_found: list of mission-semantic visual atoms (may be empty)
+- non_visual_logic_found: list of non-visual logic items (may be empty)
+- implied_external_modules: list of required modules (may be empty) subject to R7
+
+IMPORTANT:
+- Mixed clauses MUST populate BOTH lists.
+- Do NOT list primitive nouns in mission_semantic_visual_atoms_found.
+
+STEP 3 — BUILD VLM STATES (COMPLETE MAPPING)
+For each distinct mission_semantic_visual_atom found across all clauses:
+- Create exactly one VLM state (merge only if identical).
+- Assign state_type = Indicator|Risk|Anomaly based on meaning.
+- Add vlm_conditions with Strong cues + UNK rule grounded in visibility conditions.
+
+STEP 4 — BUILD NON_VLM_REQUIREMENTS (LOGIC GRAPH)
+For each non-visual logic item, create a NON_VLM requirement with:
+- name: canonical
+- Meaning: faithful mission-level interpretation (include role binding, gating, exceptions)
+- Value: exact numbers/units/symbols copied from the mission text if present; otherwise empty string ""
+- depends_on: list of needed VLM state_names (must exist)
+- required_modules: include tracker/timer/calibration/roi_polygon/etc as implied
+- unknown_when: when computation is unsafe (e.g., no calibration, sign not visible, tracker lost)
+
+Generic patterns you MUST handle:
+- time windows/durations ("within/for/after X") → timer
+- metric distances ("> X meters/feet") → calibration OR roi_polygon (unknown if missing)
+- crossing/entering/exiting → tracker + roi_polygon boundary event
+- role binding ("tracked person", "receiving person", "the two") → tracker required
+- unless/except/ignore → gating logic requirement referencing relevant VLM states
+
+STEP 5 — VALIDATION (MUST POPULATE)
+Compute these fields from your own output:
+- invalid_vlm_states: list any VLM state that violates R1/R2/R3 (primitive, time/distance/count, crossing, snake_case, no suffix).
+- visual_atoms_without_states: list any extracted mission_semantic_visual_atom with no matching VLM state.
+- all_atomic_clauses_accounted_for must be false if any clause is not referenced by either a VLM state or a NON_VLM requirement.
+
+========================================================
+OUTPUT FORMAT (JSON ONLY)
+========================================================
+Return ONLY valid JSON matching this schema exactly:
+
+{{
+  "atomic_clause_extraction": [
+    {{
+      "source_field": "mission_intent|mission_goals|mission_phases|mission_rules|mission_constraints|other",
+      "clause_text_exact": "",
+      "mission_semantic_visual_atoms_found": [""],
+      "non_visual_logic_found": [""],
+      "implied_external_modules": [""]
+    }}
+  ],
+  "vlm_states": [
+    {{
+      "state_name": "",
+      "detectability": "VLM_DETECTABLE",
+      "state_type": "Indicator|Risk|Anomaly",
+      "vlm_conditions": [
+        {{
+          "name": "",
+          "Meaning": "",
+          "Strong cues": "",
+          "UNK rule": "",
+          "confidence_notes": ""
+        }}
+      ]
+    }}
+  ],
+  "non_vlm_requirements": [
+    {{
+      "name": "",
+      "Meaning": "",
+      "Value": "",
+      "depends_on": ["..."],
+      "required_modules": ["..."],
+      "unknown_when": ""
+    }}
+  ],
+  "coverage_check": {{
+    "all_atomic_clauses_accounted_for": true,
+    "unaccounted_clauses": [],
+    "invalid_vlm_states": [],
+    "visual_atoms_without_states": []
+  }}
+}}
+
+OUTPUT RULES:
+- JSON only. No markdown. No commentary.
+- Must be valid JSON (no truncation).
+- Preserve exact values/units/symbols.
+- Never output banned primitive states.
+
+<end_of_turn>
+<start_of_turn>model
+"""
