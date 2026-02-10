@@ -170,6 +170,194 @@ def generate_states_with_classification(mission_context, model, tokenizer):
     """Generate states and classify them as VLM detectable or not"""
     print("Generating Mission States and Classifications...")
     
+#     prompt = f"""
+# <start_of_turn>user
+# You are a **Universal Mission Decomposer → Mission-Semantic VLM State Mapper**.
+
+# SYSTEM CONTRACT (NON-NEGOTIABLE):
+# - Output is used to program a VLM that only returns **0-100 confidence scores** for **mission-semantic states**.
+# - You MUST produce states in exactly three categories: **Indicator**, **Risk**, **Anomaly**.
+# - VLM does NOT compute: timers/durations/windows, event counts across windows, metric distance/speed/trajectory, calibrated geometry, geofences/maps/zones, schedules, identity verification, role binding ("tracked person", "receiving person", "the two"), “who crossed/entered/exited”, or policy actions. Those are **NON_VLM_REQUIREMENTS**.
+
+# INPUT (Ground Truth):
+# {json.dumps(mission_context, indent=2)}
+
+# ========================================================
+# ABSOLUTE RULES (MUST FOLLOW)
+# ========================================================
+
+# R0) INPUT-FAITHFULNESS (NO FABRICATION / NO NORMALIZATION)
+# - Preserve all numbers, units, symbols, ranges, inequalities, and negations EXACTLY as written.
+# - Never convert units (e.g., seconds→minutes).
+
+# R1) MISSION-SEMANTIC VISUAL ATOMS ONLY (CRITICAL)
+# A mission_semantic_visual_atom MUST be a meaningful, mission-level visual concept, such as:
+# - **attribute + entity** (e.g., "red jacket", "visible badge", "weapon-like object", "taped boundary line")
+# - **interaction / action / behavior** (e.g., "hands object to another person", "drops package", "pushes person", "aggressive posture")
+# - **signage/marker visible** (e.g., "EXIT sign visible", "STAFF ONLY marker visible")
+# - **visibility/quality condition** (e.g., "subject occluded", "severe blur", "low light")
+
+# You MUST NOT output generic primitives as atoms or states.
+
+# BANNED AS VISUAL ATOMS AND AS VLM STATES (unless explicitly requested as the mission goal):
+# - person, people, human, hand, object, motion, detected, present, bbox, tracking, pose, face
+# - snake_case variants (person_detected, hand_detected, object_present, etc.)
+
+# If you see these words in the mission text, you must attach them to mission meaning:
+# - "hands object" is valid; "object" alone is invalid.
+# - "person wearing red jacket" is valid; "person" alone is invalid.
+
+# R2) VLM STATE NAMING (STRICT)
+# - Each state_name MUST be PascalCase and MUST end with exactly one suffix:
+#   **Indicator** OR **Risk** OR **Anomaly**.
+# - state_name MUST NOT contain: detected, present, bbox, tracking.
+# - If you cannot form a mission-semantic state, do NOT create a primitive state. Move it to NON_VLM or mark UNKNOWN.
+
+# R3) HARD BAN: TIME/DISTANCE/COUNT/ZONES/CROSSING INSIDE VLM STATES
+# No VLM state_name, vlm_conditions.name, or vlm_conditions.Meaning may include:
+# - time/duration/windows: within/for/after + seconds/minutes/hours/days/consecutive frames
+# - distance/speed/trajectory: meters/feet/km/miles/mph/kph/trajectory/velocity
+# - counting/aggregation: ≥/≤/>/<, "N times", "count within window"
+# - crossing/entered/exited/separated-by-X as a VLM state
+
+# These MUST become NON_VLM_REQUIREMENTS.
+
+# R4) TRACKING / ROLE BINDING / "WHO DID WHAT" IS NON_VLM
+# If mission text includes: tracked person, same person, receiving person, the two, then/after, follow, separate, cross, enter, exit,
+# you MUST create NON_VLM_REQUIREMENTS that:
+# - include required_modules = "tracker" (and timer/calibration/roi_polygon if needed)
+# - bind roles explicitly in Meaning (e.g., giver vs receiver, subject track vs other track)
+# VLM provides atoms; tracker binds them to TrackIDs/roles.
+
+# R5) ZONES / GEOFENCES
+# - “danger zone / restricted area / within X meters / inside zone” are NON_VLM unless boundary is purely visible and non-metric.
+# - VLM may detect boundary markers/signage/lines as Indicators (e.g., "BoundaryMarkerVisibleIndicator").
+# - The event "crossed boundary / entered zone / exited zone" is ALWAYS NON_VLM (tracker + boundary geometry).
+
+# R6) IDENTITY / EMPLOYEE / AUTHORIZATION
+# - “employee/authorized/registered” is NON_VLM unless mission explicitly defines a purely visual proxy.
+# - VLM can output “badge visible” as Indicator; verifying employee status is NON_VLM and may require external lookup.
+# - Do NOT assume OCR/QR is available unless mission explicitly says "read/recognize/decode".
+
+# R7) MODULE SELECTION MUST BE EXPLICITLY JUSTIFIED BY TEXT
+# Allowed modules:
+# ["tracker","timer","calibration","roi_polygon","map_geo","access_control_db","ocr","qr_decoder","policy_engine","logger"]
+
+# Only include:
+# - ocr if text explicitly requires reading text/letters/numbers
+# - qr_decoder if mission explicitly requires decoding QR/barcode
+# - access_control_db if mission explicitly requires verification via database/lookup
+# Otherwise do NOT include these modules.
+
+# R8) DEPENDENCY CORRECTNESS
+# - Every non_vlm_requirements.depends_on must reference ONLY vlm_states.state_name entries.
+# - No dependency may reference banned primitive states.
+
+# ========================================================
+# REQUIRED WORKFLOW (DO IN ORDER)
+# ========================================================
+
+# STEP 1 — ATOMIC CLAUSE EXTRACTION (EXHAUSTIVE)
+# Split all mission text (intent/goals/phases/rules/constraints) into smallest clauses using:
+# if/then/and/or/unless/except/within/for/>/< ≥ ≤ ; , .
+# Each clause_text_exact must be an exact substring quote (no paraphrase).
+
+# STEP 2 — PER-CLAUSE CLASSIFICATION (EXHAUSTIVE)
+# For each atomic clause, produce:
+# - mission_semantic_visual_atoms_found: list of mission-semantic visual atoms (may be empty)
+# - non_visual_logic_found: list of non-visual logic items (may be empty)
+# - implied_external_modules: list of required modules (may be empty) subject to R7
+
+# IMPORTANT:
+# - Mixed clauses MUST populate BOTH lists.
+# - Do NOT list primitive nouns in mission_semantic_visual_atoms_found.
+
+# STEP 3 — BUILD VLM STATES (COMPLETE MAPPING)
+# For each distinct mission_semantic_visual_atom found across all clauses:
+# - Create exactly one VLM state (merge only if identical).
+# - Assign state_type = Indicator|Risk|Anomaly based on meaning.
+# - Add vlm_conditions with Strong cues + UNK rule grounded in visibility conditions.
+
+# STEP 4 — BUILD NON_VLM_REQUIREMENTS (LOGIC GRAPH)
+# For each non-visual logic item, create a NON_VLM requirement with:
+# - name: canonical
+# - Meaning: faithful mission-level interpretation (include role binding, gating, exceptions)
+# - Value: exact numbers/units/symbols copied from the mission text if present; otherwise empty string ""
+# - depends_on: list of needed VLM state_names (must exist)
+# - required_modules: include tracker/timer/calibration/roi_polygon/etc as implied
+# - unknown_when: when computation is unsafe (e.g., no calibration, sign not visible, tracker lost)
+
+# Generic patterns you MUST handle:
+# - time windows/durations ("within/for/after X") → timer
+# - metric distances ("> X meters/feet") → calibration OR roi_polygon (unknown if missing)
+# - crossing/entering/exiting → tracker + roi_polygon boundary event
+# - role binding ("tracked person", "receiving person", "the two") → tracker required
+# - unless/except/ignore → gating logic requirement referencing relevant VLM states
+
+# STEP 5 — VALIDATION (MUST POPULATE)
+# Compute these fields from your own output:
+# - invalid_vlm_states: list any VLM state that violates R1/R2/R3 (primitive, time/distance/count, crossing, snake_case, no suffix).
+# - visual_atoms_without_states: list any extracted mission_semantic_visual_atom with no matching VLM state.
+# - all_atomic_clauses_accounted_for must be false if any clause is not referenced by either a VLM state or a NON_VLM requirement.
+
+# ========================================================
+# OUTPUT FORMAT (JSON ONLY)
+# ========================================================
+# Return ONLY valid JSON matching this schema exactly:
+
+# {{
+#   "atomic_clause_extraction": [
+#     {{
+#       "source_field": "mission_intent|mission_goals|mission_phases|mission_rules|mission_constraints|other",
+#       "clause_text_exact": "",
+#       "mission_semantic_visual_atoms_found": [""],
+#       "non_visual_logic_found": [""],
+#       "implied_external_modules": [""]
+#     }}
+#   ],
+#   "vlm_states": [
+#     {{
+#       "state_name": "",
+#       "detectability": "VLM_DETECTABLE",
+#       "state_type": "Indicator|Risk|Anomaly",
+#       "vlm_conditions": [
+#         {{
+#           "name": "",
+#           "Meaning": "",
+#           "Strong cues": "",
+#           "UNK rule": "",
+#           "confidence_notes": ""
+#         }}
+#       ]
+#     }}
+#   ],
+#   "non_vlm_requirements": [
+#     {{
+#       "name": "",
+#       "Meaning": "",
+#       "Value": "",
+#       "depends_on": ["..."],
+#       "required_modules": ["..."],
+#       "unknown_when": ""
+#     }}
+#   ],
+#   "coverage_check": {{
+#     "all_atomic_clauses_accounted_for": true,
+#     "unaccounted_clauses": [],
+#     "invalid_vlm_states": [],
+#     "visual_atoms_without_states": []
+#   }}
+# }}
+
+# OUTPUT RULES:
+# - JSON only. No markdown. No commentary.
+# - Must be valid JSON (no truncation).
+# - Preserve exact values/units/symbols.
+# - Never output banned primitive states.
+
+# <end_of_turn>
+# <start_of_turn>model
+# """
     prompt = f"""
 <start_of_turn>user
 You are a **Universal Mission Decomposer → Mission-Semantic VLM State Mapper**.
@@ -203,157 +391,94 @@ BANNED AS VISUAL ATOMS AND AS VLM STATES (unless explicitly requested as the mis
 - person, people, human, hand, object, motion, detected, present, bbox, tracking, pose, face
 - snake_case variants (person_detected, hand_detected, object_present, etc.)
 
-If you see these words in the mission text, you must attach them to mission meaning:
-- "hands object" is valid; "object" alone is invalid.
-- "person wearing red jacket" is valid; "person" alone is invalid.
-
 R2) VLM STATE NAMING (STRICT)
 - Each state_name MUST be PascalCase and MUST end with exactly one suffix:
   **Indicator** OR **Risk** OR **Anomaly**.
 - state_name MUST NOT contain: detected, present, bbox, tracking.
-- If you cannot form a mission-semantic state, do NOT create a primitive state. Move it to NON_VLM or mark UNKNOWN.
+- If multiple clauses refer to the SAME visual concept, you MUST reuse the SAME state_name.
 
-R3) HARD BAN: TIME/DISTANCE/COUNT/ZONES/CROSSING INSIDE VLM STATES
+R3) HARD BAN: TIME/DISTANCE/COUNT/ZONES INSIDE VLM STATES
 No VLM state_name, vlm_conditions.name, or vlm_conditions.Meaning may include:
-- time/duration/windows: within/for/after + seconds/minutes/hours/days/consecutive frames
-- distance/speed/trajectory: meters/feet/km/miles/mph/kph/trajectory/velocity
+- time/duration/windows: within/for/after + seconds/minutes/hours/days
 - counting/aggregation: ≥/≤/>/<, "N times", "count within window"
-- crossing/entered/exited/separated-by-X as a VLM state
+- zones or crossings
 
-These MUST become NON_VLM_REQUIREMENTS.
+ALL such logic MUST become NON_VLM_REQUIREMENTS.
 
-R4) TRACKING / ROLE BINDING / "WHO DID WHAT" IS NON_VLM
-If mission text includes: tracked person, same person, receiving person, the two, then/after, follow, separate, cross, enter, exit,
-you MUST create NON_VLM_REQUIREMENTS that:
-- include required_modules = "tracker" (and timer/calibration/roi_polygon if needed)
-- bind roles explicitly in Meaning (e.g., giver vs receiver, subject track vs other track)
-VLM provides atoms; tracker binds them to TrackIDs/roles.
+IMPORTANT ADDITION:
+- Any clause containing an explicit duration (e.g., "for 60 seconds") MUST produce a NON_VLM_REQUIREMENT
+  with:
+  - required_modules including "timer"
+  - Value copied EXACTLY (e.g., "60 seconds")
+  - depends_on referencing the relevant VLM state(s)
+- Time clauses MUST NOT be dropped or absorbed into VLM conditions.
+
+R4) TRACKING / ROLE BINDING IS NON_VLM
+If mission text includes: same person, tracked person, ignore X person, unless X,
+you MUST create NON_VLM_REQUIREMENTS that gate or filter based on VLM states.
 
 R5) ZONES / GEOFENCES
-- “danger zone / restricted area / within X meters / inside zone” are NON_VLM unless boundary is purely visible and non-metric.
-- VLM may detect boundary markers/signage/lines as Indicators (e.g., "BoundaryMarkerVisibleIndicator").
-- The event "crossed boundary / entered zone / exited zone" is ALWAYS NON_VLM (tracker + boundary geometry).
+- “danger zone / restricted area” are NON_VLM unless boundary is purely visible and non-metric.
+- Monitoring *within* a zone is NON_VLM logic.
+- VLM may only output visible boundary markers/signage if explicitly visual.
 
-R6) IDENTITY / EMPLOYEE / AUTHORIZATION
-- “employee/authorized/registered” is NON_VLM unless mission explicitly defines a purely visual proxy.
-- VLM can output “badge visible” as Indicator; verifying employee status is NON_VLM and may require external lookup.
-- Do NOT assume OCR/QR is available unless mission explicitly says "read/recognize/decode".
+R6) IDENTITY / AUTHORIZATION
+- “handicap person” is NOT a visual atom unless the mission explicitly defines a visual proxy.
+- Treat "ignore handicap person" as NON_VLM gating logic unless a visible proxy is specified.
 
-R7) MODULE SELECTION MUST BE EXPLICITLY JUSTIFIED BY TEXT
+R7) MODULE SELECTION MUST BE JUSTIFIED BY TEXT
 Allowed modules:
 ["tracker","timer","calibration","roi_polygon","map_geo","access_control_db","ocr","qr_decoder","policy_engine","logger"]
 
-Only include:
-- ocr if text explicitly requires reading text/letters/numbers
-- qr_decoder if mission explicitly requires decoding QR/barcode
-- access_control_db if mission explicitly requires verification via database/lookup
-Otherwise do NOT include these modules.
+Include "timer" whenever duration, persistence, or temporal gating is present.
 
 R8) DEPENDENCY CORRECTNESS
-- Every non_vlm_requirements.depends_on must reference ONLY vlm_states.state_name entries.
-- No dependency may reference banned primitive states.
+- Every non_vlm_requirements.depends_on MUST reference existing vlm_states.state_name entries.
 
 ========================================================
 REQUIRED WORKFLOW (DO IN ORDER)
 ========================================================
 
 STEP 1 — ATOMIC CLAUSE EXTRACTION (EXHAUSTIVE)
-Split all mission text (intent/goals/phases/rules/constraints) into smallest clauses using:
-if/then/and/or/unless/except/within/for/>/< ≥ ≤ ; , .
-Each clause_text_exact must be an exact substring quote (no paraphrase).
+Split all mission text into the smallest clauses.
+Duration phrases like "for 60 seconds" MUST be isolated as their own atomic clause.
 
-STEP 2 — PER-CLAUSE CLASSIFICATION (EXHAUSTIVE)
-For each atomic clause, produce:
-- mission_semantic_visual_atoms_found: list of mission-semantic visual atoms (may be empty)
-- non_visual_logic_found: list of non-visual logic items (may be empty)
-- implied_external_modules: list of required modules (may be empty) subject to R7
+STEP 2 — PER-CLAUSE CLASSIFICATION
+For each atomic clause:
+- mission_semantic_visual_atoms_found
+- non_visual_logic_found (e.g., duration, ignore, gating)
+- implied_external_modules (e.g., timer)
 
-IMPORTANT:
-- Mixed clauses MUST populate BOTH lists.
-- Do NOT list primitive nouns in mission_semantic_visual_atoms_found.
+STEP 3 — BUILD VLM STATES
+- Create ONE VLM state per unique mission_semantic_visual_atom.
+- Reuse identical state_name across all clauses.
+- Do NOT encode duration or constraints inside VLM states.
 
-STEP 3 — BUILD VLM STATES (COMPLETE MAPPING)
-For each distinct mission_semantic_visual_atom found across all clauses:
-- Create exactly one VLM state (merge only if identical).
-- Assign state_type = Indicator|Risk|Anomaly based on meaning.
-- Add vlm_conditions with Strong cues + UNK rule grounded in visibility conditions.
+STEP 4 — BUILD NON_VLM_REQUIREMENTS
+For each non-visual logic item:
+- Duration → timer-based requirement
+- Ignore/except → gating requirement
+- Value MUST preserve exact text (e.g., "60 seconds")
 
-STEP 4 — BUILD NON_VLM_REQUIREMENTS (LOGIC GRAPH)
-For each non-visual logic item, create a NON_VLM requirement with:
-- name: canonical
-- Meaning: faithful mission-level interpretation (include role binding, gating, exceptions)
-- Value: exact numbers/units/symbols copied from the mission text if present; otherwise empty string ""
-- depends_on: list of needed VLM state_names (must exist)
-- required_modules: include tracker/timer/calibration/roi_polygon/etc as implied
-- unknown_when: when computation is unsafe (e.g., no calibration, sign not visible, tracker lost)
-
-Generic patterns you MUST handle:
-- time windows/durations ("within/for/after X") → timer
-- metric distances ("> X meters/feet") → calibration OR roi_polygon (unknown if missing)
-- crossing/entering/exiting → tracker + roi_polygon boundary event
-- role binding ("tracked person", "receiving person", "the two") → tracker required
-- unless/except/ignore → gating logic requirement referencing relevant VLM states
-
-STEP 5 — VALIDATION (MUST POPULATE)
-Compute these fields from your own output:
-- invalid_vlm_states: list any VLM state that violates R1/R2/R3 (primitive, time/distance/count, crossing, snake_case, no suffix).
-- visual_atoms_without_states: list any extracted mission_semantic_visual_atom with no matching VLM state.
-- all_atomic_clauses_accounted_for must be false if any clause is not referenced by either a VLM state or a NON_VLM requirement.
+STEP 5 — VALIDATION
+- Ensure every atomic clause maps to either a VLM state or a NON_VLM requirement.
 
 ========================================================
 OUTPUT FORMAT (JSON ONLY)
 ========================================================
 Return ONLY valid JSON matching this schema exactly:
 
-{{
-  "atomic_clause_extraction": [
-    {{
-      "source_field": "mission_intent|mission_goals|mission_phases|mission_rules|mission_constraints|other",
-      "clause_text_exact": "",
-      "mission_semantic_visual_atoms_found": [""],
-      "non_visual_logic_found": [""],
-      "implied_external_modules": [""]
-    }}
-  ],
-  "vlm_states": [
-    {{
-      "state_name": "",
-      "detectability": "VLM_DETECTABLE",
-      "state_type": "Indicator|Risk|Anomaly",
-      "vlm_conditions": [
-        {{
-          "name": "",
-          "Meaning": "",
-          "Strong cues": "",
-          "UNK rule": "",
-          "confidence_notes": ""
-        }}
-      ]
-    }}
-  ],
-  "non_vlm_requirements": [
-    {{
-      "name": "",
-      "Meaning": "",
-      "Value": "",
-      "depends_on": ["..."],
-      "required_modules": ["..."],
-      "unknown_when": ""
-    }}
-  ],
-  "coverage_check": {{
-    "all_atomic_clauses_accounted_for": true,
-    "unaccounted_clauses": [],
-    "invalid_vlm_states": [],
-    "visual_atoms_without_states": []
-  }}
-}}
+{
+  "atomic_clause_extraction": [...],
+  "vlm_states": [...],
+  "non_vlm_requirements": [...],
+  "coverage_check": {...}
+}
 
 OUTPUT RULES:
-- JSON only. No markdown. No commentary.
-- Must be valid JSON (no truncation).
-- Preserve exact values/units/symbols.
-- Never output banned primitive states.
+- JSON only.
+- Preserve exact values.
+- Do NOT create time-based VLM states.
 
 <end_of_turn>
 <start_of_turn>model

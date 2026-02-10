@@ -1,5 +1,5 @@
 {
-    "mission_phases": "I want to dentify a person with red jacket",
+    "mission_phases": "Related constraints / rules (to test parsing, negation, symbols, and external dependencies): Time/threshold rule: “Only escalate to 'High' if ≥3 handoff events occur within 15 minutes; otherwise keep severity 'Low'.” Zone rule (map ambiguity): “Treat 'danger zone' as the area within 2m of the emergency exit sign; if the camera cannot see the sign clearly, mark zone status as UNKNOWN (do not guess).” Occlusion rule: 'If the red jacket color is uncertain due to lighting/occlusion for >5 consecutive frames, set jacket_color = UNKNOWN and pause tracking until reacquired.' Exclusion with exception: “Ignore visitors wearing red jackets unless they cross a taped boundary line marked 'STAFF ONLY'.” Non-visual dependency: “If the person's badge QR code is not readable, do not assume employee status; employee verification requires an external access-control lookup.”",
     "mission_constraints": "Ignore the handicap person with red jacket",
     "mission_rules": "1) Always monitor in the night 2) Monitor in the danger zone"
 }
