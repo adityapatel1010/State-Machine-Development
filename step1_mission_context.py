@@ -26,6 +26,10 @@ def main():
     # No template merging, just use the input directly
     mission_context = user_input.copy()
     
+    # Filter out execution_mode (only used by Step 3)
+    if 'execution_mode' in mission_context:
+        del mission_context['execution_mode']
+    
     # Optional: Add implicit context if needed by Step 2 prompt, or remove if not.
     # The previous code added this, keeping it for now to ensure prompt context is rich enough.
     if 'implicit_understanding' not in mission_context:

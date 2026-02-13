@@ -1,6 +1,8 @@
-
-import json
 import re
+import math
+import argparse
+import json
+from flask import Flask, request, jsonify
 
 # Global Threshold for Dynamic VLM States
 GLOBAL_VLM_THRESHOLD = 80
@@ -97,46 +99,83 @@ class StaticStateMachine:
         return self.current_state, self.trigger_details
 
 class DynamicStateMachine:
-    """Sequential monitors VLM states from vlm_states.json."""
-    def __init__(self, states_file='vlm_states.json'):
-        self.states = []
-        self.current_index = 0
+    """
+    Monitors VLM states. 
+    Mode 'in-one-go': Sequential list from vlm_states.json.
+    Mode 'sequential': Parallel streams from atomic_clause_extraction (Intent, Rules, Constraints) with barrier sync.
+    """
+    def __init__(self, states_data, mode='in-one-go'):
+        self.mode = mode
         self.finished = False
         
-        try:
-            with open(states_file, 'r') as f:
-                data = json.load(f)
-                if isinstance(data, dict) and "states" in data:
-                    self.states = data["states"]
-                elif isinstance(data, list):
-                    self.states = data
-                else:
-                    self.states = []
-                    print(f"[Dynamic] Error: Invalid format in {states_file}")
-            print(f"[Dynamic] Loaded {len(self.states)} VLM states to monitor.")
-        except FileNotFoundError:
-            print(f"[Dynamic] Warning: {states_file} not found. Dynamic SM will be inactive.")
+        # --- Mode: In-One-Go (Standard Linear) ---
+        self.states = [] 
+        self.current_index = 0
+        
+        # --- Mode: Sequential (Parallel Streams) ---
+        self.streams = {
+            "mission_intent": [],
+            "mission_rules": [],
+            "mission_constraints": []
+        }
+        self.stream_indices = {
+            "mission_intent": 0,
+            "mission_rules": 0,
+            "mission_constraints": 0
+        }
+        
+        # Load Data based on format
+        if self.mode == 'sequential':
+            # Expects atomic_clause_extraction dict
+            if isinstance(states_data, dict) and "atomic_clause_extraction" in states_data:
+                for item in states_data["atomic_clause_extraction"]:
+                    source = item.get("source_field")
+                    if source in self.streams:
+                        # Combine visual atoms and non-visual logic into a single list of requirements for this stream
+                        atoms = item.get("visual_atoms_found", []) + item.get("non_visual_logic_found", [])
+                        # Filter empty
+                        atoms = [a for a in atoms if a]
+                        if atoms:
+                            self.streams[source].extend(atoms)
+                
+                print(f"[Dynamic] Sequential Mode Initialized with streams: "
+                      f"Intent({len(self.streams['mission_intent'])}), "
+                      f"Rules({len(self.streams['mission_rules'])}), "
+                      f"Constraints({len(self.streams['mission_constraints'])})")
+            else:
+                print(f"[Dynamic] Error: 'sequential' mode requires 'atomic_clause_extraction' data.")
+                
+        else:
+            # Expects standard list or dict with 'states'
+            if isinstance(states_data, dict) and "states" in states_data:
+                self.states = states_data["states"]
+            elif isinstance(states_data, list):
+                self.states = states_data
+            else:
+                self.states = []
+            print(f"[Dynamic] In-One-Go Mode: Loaded {len(self.states)} VLM states.")
 
     def get_state_names(self):
-        """Return list of all VLM state variable names from all condition categories."""
+        """Return list of all VLM state variable names."""
         names = []
-        for s in self.states:
-            conditions_obj = s.get('conditions', {})
-            # conditions_obj can be a dict (new schema) or list (old schema transitional)
-            all_conditions = []
-            
-            if isinstance(conditions_obj, dict):
-                # New Schema: Extract from all categories
-                for cat in ["phase_conditions", "rule_conditions", "constraint_conditions"]:
-                    all_conditions.extend(conditions_obj.get(cat, []))
-            elif isinstance(conditions_obj, list):
-                # Old/Transitional Schema
-                all_conditions = conditions_obj
-
-            for cond in all_conditions:
-                name = cond.get('name')
-                if name:
-                    names.append(name)
+        if self.mode == 'sequential':
+             # Return valid atoms from all streams? 
+             # For static exclusion, maybe we exclude everything tracked?
+             for stream in self.streams.values():
+                 names.extend(stream)
+        else:
+            for s in self.states:
+                conditions_obj = s.get('conditions', {})
+                all_conditions = []
+                if isinstance(conditions_obj, dict):
+                    for cat in ["phase_conditions", "rule_conditions", "constraint_conditions"]:
+                        all_conditions.extend(conditions_obj.get(cat, []))
+                elif isinstance(conditions_obj, list):
+                    all_conditions = conditions_obj
+                for cond in all_conditions:
+                    name = cond.get('name')
+                    if name:
+                        names.append(name)
         return names
 
     def _extract_values(self, data):
@@ -154,106 +193,185 @@ class DynamicStateMachine:
         return values
 
     def process_input(self, data):
-        if not self.states or self.finished:
-            return "Complete" if self.finished else "Inactive"
+        if self.finished:
+            return "Complete"
 
-        # Current target state to monitor
-        target_state_obj = self.states[self.current_index]
-        state_name = target_state_obj.get("state_name", "Unknown")
-        
-        # Flatten conditions from all categories
-        conditions_obj = target_state_obj.get("conditions", {})
-        target_conditions = []
-        
-        if isinstance(conditions_obj, dict):
-             for cat in ["phase_conditions", "rule_conditions", "constraint_conditions"]:
-                 target_conditions.extend(conditions_obj.get(cat, []))
-        elif isinstance(conditions_obj, list):
-             target_conditions = conditions_obj
-
-        if not target_conditions:
-            # No conditions? Move next.
-            self.current_index += 1
-            return self.process_input(data)
-
-        # Flatten input to find matching keys
         flat_data = self._extract_values(data)
-        
-        # Check ALL conditions (AND Logic)
-        all_met = True
-        met_details = []
 
-        for cond in target_conditions:
-            target_variable = cond.get("name")
-            if not target_variable:
-                continue
-
-            # Check if this specific condition is met
-            cond_met = False
+        # --- SEQUENTIAL MODE (Parallel Streams + Barrier) ---
+        if self.mode == 'sequential':
+            active_streams = []
+            satisfied_streams = []
             
-            # Search for variable in flat_data
-            for key, val in flat_data.items():
-                if key.lower() == target_variable.lower():
-                    # Check value
-                    try:
-                        num_val = 0.0
-                        if isinstance(val, bool):
-                            num_val = 100.0 if val else 0.0
-                        else:
-                            str_val = str(val).strip().lower()
-                            if str_val == 'true':
-                                num_val = 100.0
-                            elif str_val == 'false':
-                                num_val = 0.0
-                            else:
-                                match = re.search(r'-?\d+(\.\d+)?', str_val)
-                                if match:
-                                    num_val = float(match.group())
-                                else:
-                                    continue 
-
-                        if num_val > GLOBAL_VLM_THRESHOLD:
-                            cond_met = True
-                            met_details.append(f"{target_variable}={num_val}")
-                            break
-                    except ValueError:
-                        continue
+            # 1. Check status of each stream
+            for name, atoms in self.streams.items():
+                idx = self.stream_indices[name]
+                if idx >= len(atoms):
+                    satisfied_streams.append(name) # Finished streams are always satisfied
+                else:
+                    active_streams.append(name)
             
-            if not cond_met:
-                all_met = False
-                break # Fail early if any condition is not met
-
-        if all_met:
-            # Transition Logic
-            self.current_index += 1
-            if self.current_index < len(self.states):
-                next_obj = self.states[self.current_index]
-                next_state_name = next_obj.get("state_name", "Unknown")
-                print(f"   [Dynamic] >>> {state_name} completed (Conditions met: {met_details}). Moving to {next_state_name}")
-                return f"Monitoring: {next_state_name}"
-            else:
+            if not active_streams:
                 self.finished = True
-                print(f"   [Dynamic] >>> {state_name} completed. All states finished.")
                 return "Mission Complete"
-        
-        return f"Monitoring: {state_name}"
+
+            # 2. Check if current atom is met for each ACTIVE stream
+            # Barrier: ALL active streams must match their current atom to advance.
+            barrier_met = True
+            met_details = []
+
+            for stream_name in active_streams:
+                idx = self.stream_indices[stream_name]
+                target_atom = self.streams[stream_name][idx]
+                
+                # Check presence in input
+                # Simple loose matching: Is the atom string (or substring) present in values?
+                # Or exact key match? The prompt says "visual_atoms_found": ["person", ...]. 
+                # The input data likely has keys or values. 
+                # Let's assume we look for the atom as a Value or Key in the input.
+                
+                atom_found = False
+                # Check keys first
+                for k, v in flat_data.items():
+                    # Check key name matches atom
+                    if target_atom.lower() in k.lower():
+                         # Treat as boolean check > threshold? 
+                         # Assuming simple presence or True/Highval for now as per previous logic
+                         atom_found = True
+                         break
+                    # Check string value matches atom
+                    if isinstance(v, str) and target_atom.lower() in v.lower():
+                        atom_found = True
+                        break
+                
+                if atom_found:
+                    met_details.append(f"{stream_name}: {target_atom}")
+                else:
+                    barrier_met = False
+                    # Optimization: Break if we want to confirm failure early? 
+                    # But we might want to log partials.
+            
+            # 3. Update Indices
+            status_parts = []
+            if barrier_met:
+                 print(f"   [Dynamic] >>> Barrier Met! Advancing: {met_details}")
+                 for stream_name in active_streams:
+                     self.stream_indices[stream_name] += 1
+            
+            # Generate Status String
+            for name in self.streams:
+                idx = self.stream_indices[name]
+                total = len(self.streams[name])
+                current = self.streams[name][idx] if idx < total else "Done"
+                status_parts.append(f"{name.split('_')[1].title()}: {current} ({idx}/{total})")
+            
+            return " | ".join(status_parts)
 
 
-import argparse
-from flask import Flask, request, jsonify
+        # --- IN-ONE-GO MODE (Original Linear Logic) ---
+        else:
+            if not self.states: return "Inactive"
+            
+            target_state_obj = self.states[self.current_index]
+            state_name = target_state_obj.get("state_name", "Unknown")
+            
+            # Flatten conditions from all categories
+            conditions_obj = target_state_obj.get("conditions", {})
+            target_conditions = []
+            
+            if isinstance(conditions_obj, dict):
+                 for cat in ["phase_conditions", "rule_conditions", "constraint_conditions"]:
+                     target_conditions.extend(conditions_obj.get(cat, []))
+            elif isinstance(conditions_obj, list):
+                 target_conditions = conditions_obj
+
+            if not target_conditions:
+                self.current_index += 1
+                return self.process_input(data)
+
+            # Check ALL conditions (AND Logic)
+            all_met = True
+            met_details = []
+
+            for cond in target_conditions:
+                target_variable = cond.get("name")
+                if not target_variable:
+                    continue
+
+                cond_met = False
+                for key, val in flat_data.items():
+                    if key.lower() == target_variable.lower():
+                        try:
+                            num_val = 0.0
+                            if isinstance(val, bool):
+                                num_val = 100.0 if val else 0.0
+                            else:
+                                str_val = str(val).strip().lower()
+                                if str_val == 'true':
+                                    num_val = 100.0
+                                elif str_val == 'false':
+                                    num_val = 0.0
+                                else:
+                                    match = re.search(r'-?\d+(\.\d+)?', str_val)
+                                    if match:
+                                        num_val = float(match.group())
+                                    else:
+                                        continue 
+
+                            if num_val > GLOBAL_VLM_THRESHOLD:
+                                cond_met = True
+                                met_details.append(f"{target_variable}={num_val}")
+                                break
+                        except ValueError:
+                            continue
+                
+                if not cond_met:
+                    all_met = False
+                    break
+
+            if all_met:
+                self.current_index += 1
+                if self.current_index < len(self.states):
+                    next_obj = self.states[self.current_index]
+                    next_state_name = next_obj.get("state_name", "Unknown")
+                    print(f"   [Dynamic] >>> {state_name} completed (Conditions met: {met_details}). Moving to {next_state_name}")
+                    return f"Monitoring: {next_state_name}"
+                else:
+                    self.finished = True
+                    print(f"   [Dynamic] >>> {state_name} completed. All states finished.")
+                    return "Mission Complete"
+            
+            return f"Monitoring: {state_name}"
+
+
 
 # ... (Existing Classes) ...
+
+def load_mission_config():
+    try:
+        with open('input_mission.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print("[System] Warning: input_mission.json not found. Defaulting to 'in-one-go'.")
+        return {"execution_mode": "in-one-go"}
 
 def run_server():
     """Run Flask API Server for State Machines."""
     app = Flask(__name__)
     
     print("\nInitializing State Machines for Server...")
-    # Initialize Machines
-    dynamic_sm = DynamicStateMachine('vlm_states.json')
+    
+    config = load_mission_config()
+    mode = config.get("execution_mode", "in-one-go")
+    print(f"[System] Execution Mode: {mode}")
+
+    if mode == 'sequential':
+        dynamic_sm = DynamicStateMachine('atomic_states_example.json', mode='sequential')
+    else:
+        dynamic_sm = DynamicStateMachine('vlm_states.json', mode='in-one-go')
+        
     excluded_keys = dynamic_sm.get_state_names()
     print(f"Excluding keys from Static SM: {excluded_keys}")
-    
     static_sm = StaticStateMachine(thresholds=[30, 60, 90], excluded_keys=excluded_keys)
 
     @app.route('/process', methods=['POST'])
@@ -279,7 +397,6 @@ def run_server():
             "static_state": s_state,
             "static_details": s_details,
             "dynamic_status": d_status,
-            "dynamic_step": dynamic_sm.current_index,
             "dynamic_finished": dynamic_sm.finished
         }
         return jsonify(response)
@@ -298,8 +415,18 @@ def main():
 
     print("=== step3_dual_statemachine.py (Block Processing Mode) ===")
     
+    config = load_mission_config()
+    mode = config.get("execution_mode", "in-one-go")
+    print(f"[System] Execution Mode: {mode}")
+
     # 1. Initialize Machines
-    dynamic_sm = DynamicStateMachine('vlm_states.json')
+    if mode == 'sequential':
+        # For testing sequential mode, we need the atomic structure.
+        # Assuming step2 would output this to a file. We use our mock.
+        dynamic_sm = DynamicStateMachine('atomic_states_example.json', mode='sequential')
+    else:
+        dynamic_sm = DynamicStateMachine('vlm_states.json', mode='in-one-go')
+
     excluded_keys = dynamic_sm.get_state_names()
     print(f"Excluding keys from Static SM: {excluded_keys}")
 

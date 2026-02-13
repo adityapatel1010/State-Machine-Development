@@ -1,0 +1,66 @@
+{
+  "atomic_clause_extraction": [
+    {
+      "source_field": "mission_intent",
+      "clause_text_exact": "Trigger an alert if that tracked person hands any object to another person and then the two separate by more than 5 meters within 10 seconds, unless the receiving person is clearly an employee wearing a visible name badge.",
+      "visual_atoms_found": [
+        "person",
+        "object",
+        "hand",
+        "name badge",
+        "employee"
+      ],
+      "non_visual_logic_found": [
+        "handoff event",
+        "separation by distance",
+        "time window",
+        "exception condition"
+      ],
+      "implied_external_modules": [
+        "tracker",
+        "ocr",
+        "access_control_db"
+      ]
+    },
+    {
+      "source_field": "mission_constraints",
+      "clause_text_exact": "Time/threshold rule: Only escalate to High if ≥3 handoff events occur within 15 minutes; otherwise keep severity Low.\nZone rule (map ambiguity): Treat danger zone as the area within 2m of the emergency exit sign; if the camera cannot see the sign clearly, mark zone status as UNKNOWN (do not guess).\n Occlusion rule: If the red jacket color is uncertain due to lighting/occlusion for >5 consecutive frames, set jacket_color = UNKNOWN and pause tracking until reacquired. \nExclusion with exception: Ignore visitors wearing red jackets unless they cross a taped boundary line marked STAFF ONLY. \nNon-visual dependency: If the person’s badge QR code is not readable, do not assume employee status; employee verification requires an external access-control lookup.",
+      "visual_atoms_found": [
+        "red jacket",
+        "emergency exit sign",
+        "taped boundary line",
+        "staff only text"
+      ],
+      "non_visual_logic_found": [
+        "handoff event count threshold",
+        "time window",
+        "severity escalation",
+        "zone definition (2m)",
+        "zone ambiguity (UNKNOWN)",
+        "occlusion detection",
+        "visitor exclusion",
+        "boundary crossing",
+        "employee verification dependency"
+      ],
+      "implied_external_modules": [
+        "tracker",
+        "timer",
+        "calibration",
+        "access_control_db",
+        "policy_engine"
+      ]
+    },
+    {
+      "source_field": "mission_rules",
+      "clause_text_exact": "1) Always monitor in the night 2) Monitor in the danger zone",
+      "visual_atoms_found": [],
+      "non_visual_logic_found": [
+        "nighttime monitoring",
+        "danger zone monitoring"
+      ],
+      "implied_external_modules": [
+        "policy_engine"
+      ]
+    }
+  ]
+}

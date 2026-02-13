@@ -1,0 +1,4 @@
+max length for mission intent = 32 words
+max length for mission goals/phases = 60 words
+max length for mission rules/constraints = 40 words
+Configuration setting for mission goal : sequential or in-one go (select one option)
