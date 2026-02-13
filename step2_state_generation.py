@@ -392,7 +392,7 @@ OUTPUT RULES:
 <start_of_turn>model
 """
 
-    response = generate_text(model, tokenizer, prompt, max_new_tokens=1024)
+    response = generate_text(model, tokenizer, prompt, max_new_tokens=4096)
     print(response)
     
     return extract_json_from_response(response)
@@ -485,66 +485,78 @@ def main():
         sys.exit(1)
         
     # 5. Process and Display Output
-    vlm_detectable = []
-    non_vlm_detectable = []
     
-    for state in result.get("states", []):
-        if state.get("detectability") == "VLM_DETECTABLE":
-            vlm_detectable.append(state)
-        else:
-            non_vlm_detectable.append(state)
-            
+    # Extract components from the new structure
+    atomic_clauses = result.get("atomic_clause_extraction", [])
+    vlm_states_list = result.get("vlm_states", [])
+    non_vlm_reqs = result.get("non_vlm_requirements", [])
+    
+    # Fallback for old structure if LLM reverts (safety)
+    if not vlm_states_list and "states" in result:
+        print("Warning: LLM used old 'states' format. Adapting...")
+        vlm_states_list = [s for s in result["states"] if s.get("detectability") == "VLM_DETECTABLE"]
+        non_vlm_list = [s for s in result["states"] if s.get("detectability") != "VLM_DETECTABLE"] # Old format didn't have separate reqs list usually
+        # Map old non-vlm states to reqs if needed, or just list them.
+    
+    print("\n" + "="*30)
+    print(" OUTPUT: ATOMIC CLAUSES")
+    print("="*30)
+    for clause in atomic_clauses:
+        print(f"• Source: {clause.get('source_field')}")
+        print(f"  Clause: {clause.get('clause_text_exact')[:100]}...")
+        print(f"  Proposed VLM States: {clause.get('proposed_vlm_state_names')}")
+
     print("\n" + "="*30)
     print(" OUTPUT: VLM DETECTABLE STATES")
     print("="*30)
-    if vlm_detectable:
-        for s in vlm_detectable:
-            state_name = s.get('state_name', 'Unknown')
-            conditions_obj = s.get('conditions', {})
-            print(f"• {state_name}")
-            
-            # Print conditions by category
-            for cat in ["phase_conditions", "rule_conditions", "constraint_conditions"]:
-                cond_list = conditions_obj.get(cat, [])
-                if cond_list:
-                   print(f"  [{cat.replace('_', ' ').title()}]")
-                   for c in cond_list:
-                       print(f"    - {c.get('name')}: {c.get('Meaning', 'N/A')}")
-                       print(f"      Strong Cues: {c.get('Strong cues', 'N/A')}")
-    else:
-        print("None")
+    
+    # Pre-process VLM states to rename 'vlm_conditions' to 'conditions' for Step 3 compatibility
+    final_vlm_states = []
+    for s in vlm_states_list:
+        # Create a copy to modify
+        s_copy = s.copy()
+        if "vlm_conditions" in s_copy:
+            s_copy["conditions"] = s_copy.pop("vlm_conditions")
+        final_vlm_states.append(s_copy)
+
+        state_name = s_copy.get('state_name', 'Unknown')
+        conditions_list = s_copy.get('conditions', [])
+        
+        print(f"• {state_name} ({s_copy.get('state_type', 'Type Unknown')})")
+        for c in conditions_list:
+            print(f"    - {c.get('name')}: {c.get('Meaning', 'N/A')}")
+            print(f"      Strong Cues: {c.get('Strong cues', 'N/A')}")
 
     print("\n" + "="*30)
-    print(" OUTPUT: NON-VLM DETECTABLE STATES")
+    print(" OUTPUT: NON-VLM REQUIREMENTS")
     print("="*30)
-    if non_vlm_detectable:
-        for s in non_vlm_detectable:
-            state_name = s.get('state_name', 'Unknown')
-            conditions_obj = s.get('conditions', {})
-            print(f"• {state_name}")
-            
-            for cat in ["phase_conditions", "rule_conditions", "constraint_conditions"]:
-                cond_list = conditions_obj.get(cat, [])
-                if cond_list:
-                   print(f"  [{cat.replace('_', ' ').title()}]")
-                   for c in cond_list:
-                       print(f"    - {c.get('name')}: {c.get('Meaning', 'N/A')}")
-    else:
-        print("None")
+    for req in non_vlm_reqs:
+        print(f"• {req.get('name')}")
+        print(f"  Meaning: {req.get('Meaning')}")
+        print(f"  Value: {req.get('Value', 'N/A')}")
+        print(f"  Modules: {req.get('required_modules')}")
 
     # Save to file
     with open('MissionStates.json', 'w') as f:
         json.dump(result, f, indent=2)
-    print(f"\n✓ Saved detailed state data to MissionStates.json")
+    print(f"\n✓ Saved raw output to MissionStates.json")
 
-    # Save segregated states
+    # Save VLM states (Hybrid Structure for Step 3)
+    # Step 3 'in-one-go' needs list of states.
+    # Step 3 'sequential' needs atomic_clause_extraction.
+    # We save a dict with both.
+    vlm_output_data = {
+        "states": final_vlm_states,
+        "atomic_clause_extraction": atomic_clauses
+    }
+    
     with open('vlm_states.json', 'w') as f:
-        json.dump(vlm_detectable, f, indent=2)
-    print(f"✓ Saved VLM states to vlm_states.json")
+        json.dump(vlm_output_data, f, indent=2)
+    print(f"✓ Saved VLM States & Atomic Clauses to vlm_states.json")
 
     with open('non_vlm_states.json', 'w') as f:
-        json.dump(non_vlm_detectable, f, indent=2)
-    print(f"✓ Saved Non-VLM states to non_vlm_states.json")
+        json.dump(non_vlm_reqs, f, indent=2)
+    print(f"✓ Saved Non-VLM Requirements to non_vlm_states.json")
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,6 @@
 {
   "mission_intent": "Detect production-stopping events, scrap risks, and injuries in real-time. Focus on trim+final assembly where people and robots share space. Prioritize safety over quality defects.",
-  "mission_goal": "Phase 1: Safety Watch—monitor vehicle-pedestrian near-misses, PPE compliance, unsafe robot cell entry. Phase 2: Quality Watch—detect missing/incorrect parts, rework loops. Phase 3: Flow Watch—monitor blocked aisles, material shortages, line-side staging violations.",
-  "mission_rules": "Alert only with clear visual evidence; output UNKNOWN if uncertain. Prioritize safety events. Escalate to High if hazard repeats ≥2 times in 10 minutes. Distance/zone policies require visible markers.",
+  "mission_goal": "Phase 1: Monitor vehicle-pedestrian near-misses. Phase 2: Detect missing/incorrect parts, rework loops. Phase 3: Monitor blocked aisles, material shortages, line-side staging violations.",
+  "mission_rules": "Alert only with clear visual evidence; output UNKNOWN if uncertain. Prioritize safety events.",
   "execution_mode": "sequential"
 }
