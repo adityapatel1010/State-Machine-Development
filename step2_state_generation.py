@@ -480,7 +480,7 @@ def main():
     # result = generate_states_with_classification(mission_context, aggregated_info, model, tokenizer)
     result = generate_states_with_classification(mission_context, model, tokenizer)
     
-    if not result or "states" not in result:
+    if not result or ("states" not in result and "vlm_states" not in result):
         print("✗ Failed to generate valid states.")
         sys.exit(1)
         
